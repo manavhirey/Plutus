@@ -102,7 +102,7 @@ public sealed class ClaudeCategorizer(
         return content;
     }
 
-    private static JsonOutputFormat BuildSchema(IReadOnlyList<Category> categories)
+    internal static JsonOutputFormat BuildSchema(IReadOnlyList<Category> categories)
     {
         var names = categories.Select(c => c.Name).ToArray();
 

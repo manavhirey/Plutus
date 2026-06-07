@@ -18,4 +18,14 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
+  <!-- .NET SDK container publishing (no Dockerfile). Build with:
+       dotnet publish src/Plutus.Web -c Release /t:PublishContainer
+       Uses a chiseled, non-root base; "-extra" includes ICU + tzdata for
+       date/culture formatting and local-time conversion in the UI. -->
+  <PropertyGroup>
+    <ContainerRepository>plutus</ContainerRepository>
+    <ContainerImageTags>latest</ContainerImageTags>
+    <ContainerFamily>noble-chiseled-extra</ContainerFamily>
+  </PropertyGroup>
+
 </Project>

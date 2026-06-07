@@ -1,0 +1,21 @@
+services:
+  plutus:
+    image: plutus:latest
+    container_name: plutus
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Required: your Anthropic API key for categorization.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Persist the SQLite DB and the Data Protection key ring onto the volume.
+      - Plutus__Database__Path=/data/plutus.db
+      - Plutus__DataProtectionKeysPath=/data/keys
+      # Optional overrides:
+      # - Plutus__Sync__DailyTime=06:00
+      # - Plutus__Claude__Model=claude-haiku-4-5
+    volumes:
+      - plutus-data:/data
+
+volumes:
+  plutus-data:
