@@ -1,0 +1,93 @@
+@page "/transactions"
+@inject IDbContextFactory<PlutusDbContext> DbFactory
+
+<PageTitle>Plutus — Past Transactions</PageTitle>
+
+<div class="day-header">
+    <h1>Past Transactions</h1>
+    <div class="row-inline">
+        <span class="muted">Filter</span>
+        <select @bind="_categoryFilter" @bind:after="LoadAsync" style="width:auto">
+            <option value="0">All categories</option>
+            @foreach (var category in _categories)
+            {
+                <option value="@category.Id">@category.Name</option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_transactions.Count == 0)
+{
+    <div class="card muted">No transactions to show.</div>
+}
+else
+{
+    @foreach (var day in _transactions
+        .GroupBy(t => t.PostedDate.ToLocalTime().Date)
+        .OrderByDescending(g => g.Key))
+    {
+        <div class="day-header">
+            <span class="day">@day.Key.ToString("dddd, MMM d, yyyy")</span>
+            <span class="total">@Money.Expense(day.Sum(t => t.Amount))</span>
+        </div>
+        <div class="card" style="padding:.25rem 1rem">
+            <table>
+                <tbody>
+                    @foreach (var txn in day.OrderByDescending(t => t.PostedDate))
+                    {
+                        <tr class="txn-row">
+                            <td>@txn.Description</td>
+                            <td style="width:140px">
+                                @if (txn.Category is not null)
+                                {
+                                    <span class="chip" style="background:@(txn.Category.Color ?? "#6b7280")">@txn.Category.Name</span>
+                                }
+                                else
+                                {
+                                    <span class="muted">Uncategorized</span>
+                                }
+                            </td>
+                            <td class="amount" style="width:110px;text-align:right">@Money.Expense(txn.Amount)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private bool _loading = true;
+    private int _categoryFilter; // 0 = all
+    private List<Category> _categories = [];
+    private List<Transaction> _transactions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _categories = await db.Categories.AsNoTracking().OrderBy(c => c.SortOrder).ToListAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var query = db.Transactions.AsNoTracking().Include(t => t.Category).AsQueryable();
+        if (_categoryFilter != 0)
+        {
+            query = query.Where(t => t.CategoryId == _categoryFilter);
+        }
+
+        _transactions = await query
+            .OrderByDescending(t => t.PostedDate)
+            .Take(500)
+            .ToListAsync();
+        _loading = false;
+    }
+}

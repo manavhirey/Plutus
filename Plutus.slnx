@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Plutus.Core/Plutus.Core.csproj" />
+    <Project Path="src/Plutus.Web/Plutus.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Plutus.Core.Tests/Plutus.Core.Tests.csproj" />
+  </Folder>
+</Solution>

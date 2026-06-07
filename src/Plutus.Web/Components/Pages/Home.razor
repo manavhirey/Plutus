@@ -1,0 +1,75 @@
+@page "/"
+@inject IDbContextFactory<PlutusDbContext> DbFactory
+
+<PageTitle>Plutus — Dashboard</PageTitle>
+
+<h1>Dashboard</h1>
+
+@if (_loading)
+{
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <div class="card-grid">
+        <div class="card">
+            <div class="stat-label">Needs review</div>
+            <div class="stat-value">@_needsReview</div>
+            @if (_needsReview > 0)
+            {
+                <a class="muted" href="review">Review now →</a>
+            }
+        </div>
+        <div class="card">
+            <div class="stat-label">Last sync</div>
+            @if (_lastRun is null)
+            {
+                <div class="stat-value"><span class="status-dot none"></span>Never</div>
+                <span class="muted">Connect SimpleFIN in Settings</span>
+            }
+            else
+            {
+                var ok = _lastRun.Status == SyncStatus.Success;
+                <div class="stat-value">
+                    <span class="status-dot @(ok ? "ok" : "bad")"></span>@_lastRun.Status
+                </div>
+                <span class="muted">@_lastRun.RanAt.ToLocalTime().ToString("g") · @_lastRun.NewTransactionCount new</span>
+            }
+        </div>
+    </div>
+
+    <h2>Accounts</h2>
+    @if (_accounts.Count == 0)
+    {
+        <div class="card muted">No accounts yet. Connect SimpleFIN in Settings to start syncing.</div>
+    }
+    else
+    {
+        <div class="card-grid">
+            @foreach (var account in _accounts)
+            {
+                <div class="card">
+                    <div class="stat-label">@account.Name</div>
+                    <div class="stat-value">@Money.Plain(account.Balance)</div>
+                    <span class="muted">@(account.Org ?? account.Currency)</span>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private bool _loading = true;
+    private List<Account> _accounts = [];
+    private int _needsReview;
+    private SyncRun? _lastRun;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _accounts = await db.Accounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync();
+        _needsReview = await db.Transactions.CountAsync(t => !t.IsReviewed);
+        _lastRun = await db.SyncRuns.AsNoTracking().OrderByDescending(r => r.RanAt).FirstOrDefaultAsync();
+        _loading = false;
+    }
+}

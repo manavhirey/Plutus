@@ -15,6 +15,9 @@ obj/
 *.db-shm
 *.db-wal
 
+# ASP.NET Data Protection key ring (local cryptographic keys — never commit)
+keys/
+
 # Secrets / local config
 appsettings.*.local.json
 secrets.json

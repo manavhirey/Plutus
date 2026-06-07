@@ -1,0 +1,199 @@
+@page "/settings"
+@inject IDbContextFactory<PlutusDbContext> DbFactory
+@inject ISimpleFinConnectionService ConnectionService
+@inject Microsoft.Extensions.Options.IOptions<SyncOptions> SyncOptions
+
+<PageTitle>Plutus — Settings</PageTitle>
+
+<h1>Settings</h1>
+
+@if (_bannerMessage is not null)
+{
+    <div class="banner @(_bannerOk ? "banner-success" : "banner-error")">@_bannerMessage</div>
+}
+
+<h2>SimpleFIN connection</h2>
+<div class="card">
+    @if (_connection is null)
+    {
+        <p><span class="status-dot none"></span><span class="muted">Not connected.</span></p>
+    }
+    else
+    {
+        <p>
+            <span class="status-dot ok"></span>Connected since @_connection.CreatedAt.ToLocalTime().ToString("g").
+            @if (_connection.LastSyncedAt is { } last)
+            {
+                <span class="muted"> Last synced @last.ToLocalTime().ToString("g").</span>
+            }
+            else
+            {
+                <span class="muted"> Not yet synced.</span>
+            }
+        </p>
+    }
+
+    <div class="field" style="margin-top:.5rem">
+        <label>Setup token (paste from SimpleFIN, single-use)</label>
+        <input type="password" @bind="_setupToken" placeholder="Base64 setup token" />
+    </div>
+    <div class="row-inline" style="justify-content:flex-end">
+        <button class="btn btn-primary" disabled="@(_connecting || string.IsNullOrWhiteSpace(_setupToken))" @onclick="ConnectAsync">
+            @(_connecting ? "Connecting…" : _connection is null ? "Connect" : "Reconnect")
+        </button>
+    </div>
+</div>
+
+<h2>Categories</h2>
+<div class="card">
+    <table>
+        <tbody>
+            @foreach (var category in _categories)
+            {
+                <tr class="txn-row">
+                    <td style="width:60px"><input type="number" @bind="category.SortOrder" style="width:60px" /></td>
+                    <td><input type="text" @bind="category.Name" /></td>
+                    <td style="width:120px"><input type="text" @bind="category.Color" placeholder="#hex" /></td>
+                    <td style="width:160px;text-align:right">
+                        <button class="btn btn-sm" @onclick="() => SaveCategoryAsync(category)">Save</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteCategoryAsync(category.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+            <tr class="txn-row">
+                <td></td>
+                <td><input type="text" @bind="_newCategoryName" placeholder="New category" /></td>
+                <td><input type="text" @bind="_newCategoryColor" placeholder="#4F46E5" /></td>
+                <td style="text-align:right">
+                    <button class="btn btn-sm btn-primary" disabled="@string.IsNullOrWhiteSpace(_newCategoryName)" @onclick="AddCategoryAsync">Add</button>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<h2>Sync</h2>
+<div class="card">
+    <p class="muted">Automatic daily sync at @SyncOptions.Value.DailyTime, plus a catch-up run on startup.</p>
+    @if (_runs.Count == 0)
+    {
+        <p class="muted">No sync runs yet.</p>
+    }
+    else
+    {
+        <table>
+            <tbody>
+                @foreach (var run in _runs)
+                {
+                    var ok = run.Status == SyncStatus.Success;
+                    <tr class="txn-row">
+                        <td><span class="status-dot @(ok ? "ok" : "bad")"></span>@run.RanAt.ToLocalTime().ToString("g")</td>
+                        <td>@run.Status</td>
+                        <td>@run.NewTransactionCount new</td>
+                        <td class="muted">@run.Error</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private SimpleFinConnection? _connection;
+    private string _setupToken = "";
+    private bool _connecting;
+
+    private List<CategoryRow> _categories = [];
+    private string _newCategoryName = "";
+    private string _newCategoryColor = "#4F46E5";
+
+    private List<SyncRun> _runs = [];
+
+    private bool _bannerOk;
+    private string? _bannerMessage;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _connection = await ConnectionService.GetConnectionAsync();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _categories = await db.Categories.AsNoTracking()
+            .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
+            .Select(c => new CategoryRow { Id = c.Id, Name = c.Name, Color = c.Color, SortOrder = c.SortOrder })
+            .ToListAsync();
+        _runs = await db.SyncRuns.AsNoTracking().OrderByDescending(r => r.RanAt).Take(10).ToListAsync();
+    }
+
+    private async Task ConnectAsync()
+    {
+        _connecting = true;
+        _bannerMessage = null;
+        try
+        {
+            await ConnectionService.ConnectAsync(_setupToken.Trim());
+            _setupToken = "";
+            _bannerOk = true;
+            _bannerMessage = "Connected to SimpleFIN.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _bannerOk = false;
+            _bannerMessage = $"Connection failed: {ex.Message}";
+        }
+        finally
+        {
+            _connecting = false;
+        }
+    }
+
+    private async Task SaveCategoryAsync(CategoryRow row)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == row.Id);
+        if (category is not null)
+        {
+            category.Name = row.Name.Trim();
+            category.Color = string.IsNullOrWhiteSpace(row.Color) ? null : row.Color!.Trim();
+            category.SortOrder = row.SortOrder;
+            await db.SaveChangesAsync();
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task DeleteCategoryAsync(int id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.Categories.Where(c => c.Id == id).ExecuteDeleteAsync();
+        await LoadAsync();
+    }
+
+    private async Task AddCategoryAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var nextSort = _categories.Count == 0 ? 0 : _categories.Max(c => c.SortOrder) + 1;
+        db.Categories.Add(new Category
+        {
+            Name = _newCategoryName.Trim(),
+            Color = string.IsNullOrWhiteSpace(_newCategoryColor) ? null : _newCategoryColor.Trim(),
+            IsSystem = false,
+            SortOrder = nextSort,
+        });
+        await db.SaveChangesAsync();
+
+        _newCategoryName = "";
+        _newCategoryColor = "#4F46E5";
+        await LoadAsync();
+    }
+
+    private sealed class CategoryRow
+    {
+        public int Id { get; init; }
+        public string Name { get; set; } = "";
+        public string? Color { get; set; }
+        public int SortOrder { get; set; }
+    }
+}

@@ -1,0 +1,148 @@
+@page "/review"
+@inject IDbContextFactory<PlutusDbContext> DbFactory
+@inject ICategorizer Categorizer
+@inject TimeProvider Time
+
+<PageTitle>Plutus — Review</PageTitle>
+
+<h1>Daily Review</h1>
+
+@if (_loading)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_items.Count == 0)
+{
+    <div class="card muted">🎉 Nothing to review — you're all caught up.</div>
+}
+else
+{
+    <p class="muted">@_items.Count transaction@(_items.Count == 1 ? "" : "s") to review.</p>
+
+    @foreach (var item in _items)
+    {
+        <div class="card review-card">
+            <div class="review-head">
+                <div>
+                    <span class="muted">@item.PostedDate.ToLocalTime().ToString("MMM d")</span>
+                    <span class="review-desc">@item.Description</span>
+                </div>
+                <span class="amount">@Money.Expense(item.Amount)</span>
+            </div>
+
+            <div class="field" style="margin-top:.75rem">
+                <label>
+                    Category
+                    @if (item.HasSuggestion)
+                    {
+                        <span class="muted">— suggested</span>
+                    }
+                </label>
+                <select @bind="item.SelectedCategoryId">
+                    <option value="0">Uncategorized</option>
+                    @foreach (var category in _categories)
+                    {
+                        <option value="@category.Id">@category.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Note</label>
+                <input type="text" @bind="item.Note" placeholder="e.g. birthday gift for Sam" />
+            </div>
+
+            <div class="row-inline" style="justify-content:flex-end">
+                <button class="btn btn-primary" disabled="@item.Saving" @onclick="() => SaveAsync(item)">
+                    @(item.Saving ? "Saving…" : "Save & next")
+                </button>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private bool _loading = true;
+    private List<Category> _categories = [];
+    private readonly List<ReviewItem> _items = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _categories = await db.Categories.AsNoTracking().OrderBy(c => c.SortOrder).ToListAsync();
+
+        var pending = await db.Transactions.AsNoTracking()
+            .Where(t => !t.IsReviewed)
+            .OrderByDescending(t => t.PostedDate)
+            .ToListAsync();
+
+        foreach (var t in pending)
+        {
+            _items.Add(new ReviewItem
+            {
+                Id = t.Id,
+                Description = t.Description,
+                Amount = t.Amount,
+                PostedDate = t.PostedDate,
+                OriginalCategoryId = t.CategoryId ?? 0,
+                SelectedCategoryId = t.CategoryId ?? 0,
+                Note = t.Note,
+                HasSuggestion = t.CategoryId is not null,
+            });
+        }
+
+        _loading = false;
+    }
+
+    private async Task SaveAsync(ReviewItem item)
+    {
+        item.Saving = true;
+
+        var note = string.IsNullOrWhiteSpace(item.Note) ? null : item.Note!.Trim();
+        var manualOverride = item.SelectedCategoryId != item.OriginalCategoryId;
+        int? categoryId = item.SelectedCategoryId == 0 ? null : item.SelectedCategoryId;
+
+        // The note refines the category — unless the user manually changed the dropdown
+        // (a manual override skips the Claude call, per design).
+        if (!manualOverride && note is not null)
+        {
+            var result = await Categorizer.CategorizeAsync(item.Description, note, _categories);
+            if (result is not null)
+            {
+                var match = _categories.FirstOrDefault(
+                    c => string.Equals(c.Name, result.Category, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                {
+                    categoryId = match.Id;
+                }
+            }
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var transaction = await db.Transactions.FirstOrDefaultAsync(t => t.Id == item.Id);
+        if (transaction is not null)
+        {
+            transaction.Note = note;
+            transaction.CategoryId = categoryId;
+            transaction.IsCategorized = categoryId is not null;
+            transaction.IsReviewed = true;
+            transaction.CategorizedAt = categoryId is not null ? Time.GetUtcNow().UtcDateTime : transaction.CategorizedAt;
+            await db.SaveChangesAsync();
+        }
+
+        _items.Remove(item);
+    }
+
+    private sealed class ReviewItem
+    {
+        public int Id { get; init; }
+        public string Description { get; init; } = "";
+        public decimal Amount { get; init; }
+        public DateTime PostedDate { get; init; }
+        public int OriginalCategoryId { get; init; }
+        public int SelectedCategoryId { get; set; }
+        public string? Note { get; set; }
+        public bool HasSuggestion { get; init; }
+        public bool Saving { get; set; }
+    }
+}
