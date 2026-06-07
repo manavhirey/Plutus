@@ -18,6 +18,9 @@ obj/
 # ASP.NET Data Protection key ring (local cryptographic keys — never commit)
 keys/
 
+# Container build artifacts
+artifacts/
+
 # Secrets / local config
 appsettings.*.local.json
 secrets.json

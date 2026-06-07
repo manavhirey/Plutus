@@ -1,8 +1,19 @@
 services:
+  # One-shot init: the app runs as non-root (uid 1654), but a fresh named volume
+  # is root-owned. This grants the app ownership of the data dir before it starts.
+  plutus-init:
+    image: busybox
+    command: sh -c "mkdir -p /data && chown -R 1654:1654 /data"
+    volumes:
+      - plutus-data:/data
+
   plutus:
     image: plutus:latest
     container_name: plutus
     restart: unless-stopped
+    depends_on:
+      plutus-init:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     environment:
