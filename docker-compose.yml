@@ -1,4 +1,22 @@
 services:
+  # Reverse proxy — exposes the app on port 80 at the machine's IP.
+  traefik:
+    image: traefik:v3.3
+    container_name: plutus-traefik
+    restart: unless-stopped
+    # File provider instead of the Docker provider: this host's daemon enforces a
+    # minimum API version Traefik's docker client can't meet. The file routes to the
+    # app by its compose DNS name, so no Docker socket is needed.
+    command:
+      - --entrypoints.web.address=:80
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+    ports:
+      # Host :80 is taken by an existing Caddy proxy on this VPS, so Plutus's Traefik
+      # listens on :8081. Change to "80:80" if you free up port 80.
+      - "8081:80"
+    volumes:
+      - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+
   # One-shot init: the app runs as non-root (uid 1654), but a fresh named volume
   # is root-owned. This grants the app ownership of the data dir before it starts.
   plutus-init:
@@ -14,11 +32,12 @@ services:
     depends_on:
       plutus-init:
         condition: service_completed_successfully
-    ports:
-      - "8080:8080"
     environment:
       # Required: your Anthropic API key for categorization.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Optional: headless first-time SimpleFIN provisioning (single-use setup token).
+      # Claimed on startup if no connection exists yet; ignored afterwards.
+      - Plutus__SimpleFin__SetupToken=${SIMPLEFIN_SETUP_TOKEN:-}
       # Persist the SQLite DB and the Data Protection key ring onto the volume.
       - Plutus__Database__Path=/data/plutus.db
       - Plutus__DataProtectionKeysPath=/data/keys

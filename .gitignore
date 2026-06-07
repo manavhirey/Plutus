@@ -24,6 +24,8 @@ artifacts/
 # Secrets / local config
 appsettings.*.local.json
 secrets.json
+.env
+.env.local
 
 # Brainstorming companion + local session scratch
 .superpowers/
