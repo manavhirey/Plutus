@@ -1,0 +1,24 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+
+# .NET / Rider / VS
+.vs/
+.idea/
+*.suo
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets / local config
+appsettings.*.local.json
+secrets.json
+
+# Brainstorming companion + local session scratch
+.superpowers/
+.remember/
