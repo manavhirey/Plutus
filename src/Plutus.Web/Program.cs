@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -73,15 +74,20 @@ if (!string.IsNullOrWhiteSpace(setupToken))
     }
 }
 
-// Honor X-Forwarded-* from the reverse proxy (Traefik) so the app sees the real
-// scheme/client. Proxies live on a dynamic Docker network, so trust all here —
-// the app isn't exposed directly, only via the proxy.
+// Honor X-Forwarded-* only from the reverse proxy on the private Docker network —
+// not from arbitrary clients, which could otherwise spoof scheme/client IP.
+// ForwardLimit = 1 trusts only the last hop (Traefik).
 var forwardedHeaders = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    ForwardLimit = 1,
 };
-forwardedHeaders.KnownNetworks.Clear();
+forwardedHeaders.KnownIPNetworks.Clear();
 forwardedHeaders.KnownProxies.Clear();
+// RFC1918 ranges: the Docker bridge / compose network lives here.
+forwardedHeaders.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+forwardedHeaders.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+forwardedHeaders.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
 app.UseForwardedHeaders(forwardedHeaders);
 
 if (!app.Environment.IsDevelopment())
