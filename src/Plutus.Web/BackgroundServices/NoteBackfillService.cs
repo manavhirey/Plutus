@@ -27,7 +27,8 @@ public sealed class NoteBackfillService(
         }
 
         await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<PlutusDbContext>();
+        var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PlutusDbContext>>();
+        await using var db = await dbFactory.CreateDbContextAsync(stoppingToken);
         var categorizer = scope.ServiceProvider.GetRequiredService<ICategorizer>();
 
         var categories = await db.Categories
