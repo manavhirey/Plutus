@@ -63,7 +63,7 @@ else
                     <div class="field" style="margin-bottom:0">
                         <label>
                             Note
-                            @if (item.HasNoteSuggestion && string.Equals(item.Note, item.OriginalNote, StringComparison.Ordinal))
+                            @if (item.HasNoteSuggestion && !NoteEdited(item))
                             {
                                 <span class="suggested-badge">AI suggested</span>
                             }
@@ -121,9 +121,8 @@ else
     {
         item.Saving = true;
 
-        var note = string.IsNullOrWhiteSpace(item.Note) ? null : item.Note!.Trim();
-        var originalNote = string.IsNullOrWhiteSpace(item.OriginalNote) ? null : item.OriginalNote!.Trim();
-        var noteEdited = !string.Equals(note, originalNote, StringComparison.Ordinal);
+        var note = NormalizeNote(item.Note);
+        var noteEdited = NoteEdited(item);
         var manualOverride = item.SelectedCategoryId != item.OriginalCategoryId;
         int? categoryId = item.SelectedCategoryId == 0 ? null : item.SelectedCategoryId;
 
@@ -155,6 +154,12 @@ else
 
         _items.Remove(item);
     }
+
+    private static string? NormalizeNote(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool NoteEdited(ReviewItem item) =>
+        !string.Equals(NormalizeNote(item.Note), NormalizeNote(item.OriginalNote), StringComparison.Ordinal);
 
     private sealed class ReviewItem
     {
