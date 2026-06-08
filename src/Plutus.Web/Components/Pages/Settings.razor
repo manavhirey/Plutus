@@ -60,48 +60,50 @@
 
 <div class="section-label">Categories</div>
 <div class="card settings-section" style="padding:.5rem 1.25rem">
-    <table>
-        <thead>
-            <tr>
-                <th style="width:60px">Order</th>
-                <th>Name</th>
-                <th style="width:130px">Color</th>
-                <th style="width:170px"></th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var category in _categories)
-            {
+    <div class="table-scroll">
+        <table class="cat-table">
+            <thead>
+                <tr>
+                    <th style="width:60px">Order</th>
+                    <th>Name</th>
+                    <th style="width:130px">Color</th>
+                    <th style="width:170px"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var category in _categories)
+                {
+                    <tr class="txn-row">
+                        <td><input type="number" @bind="category.SortOrder" style="width:56px" /></td>
+                        <td>
+                            <div class="row-inline" style="gap:.6rem">
+                                @if (!string.IsNullOrWhiteSpace(category.Color))
+                                {
+                                    <div class="color-preview" style="background:@category.Color"></div>
+                                }
+                                <input type="text" @bind="category.Name" />
+                            </div>
+                        </td>
+                        <td><input type="text" @bind="category.Color" placeholder="#hex" /></td>
+                        <td style="text-align:right">
+                            <div class="row-inline" style="justify-content:flex-end">
+                                <button class="btn btn-sm" @onclick="() => SaveCategoryAsync(category)">Save</button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteCategoryAsync(category.Id)">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
                 <tr class="txn-row">
-                    <td><input type="number" @bind="category.SortOrder" style="width:56px" /></td>
-                    <td>
-                        <div class="row-inline" style="gap:.6rem">
-                            @if (!string.IsNullOrWhiteSpace(category.Color))
-                            {
-                                <div class="color-preview" style="background:@category.Color"></div>
-                            }
-                            <input type="text" @bind="category.Name" />
-                        </div>
-                    </td>
-                    <td><input type="text" @bind="category.Color" placeholder="#hex" /></td>
+                    <td></td>
+                    <td><input type="text" @bind="_newCategoryName" placeholder="New category name" /></td>
+                    <td><input type="text" @bind="_newCategoryColor" placeholder="#4F46E5" /></td>
                     <td style="text-align:right">
-                        <div class="row-inline" style="justify-content:flex-end">
-                            <button class="btn btn-sm" @onclick="() => SaveCategoryAsync(category)">Save</button>
-                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteCategoryAsync(category.Id)">Delete</button>
-                        </div>
+                        <button class="btn btn-sm btn-primary" disabled="@string.IsNullOrWhiteSpace(_newCategoryName)" @onclick="AddCategoryAsync">Add</button>
                     </td>
                 </tr>
-            }
-            <tr class="txn-row">
-                <td></td>
-                <td><input type="text" @bind="_newCategoryName" placeholder="New category name" /></td>
-                <td><input type="text" @bind="_newCategoryColor" placeholder="#4F46E5" /></td>
-                <td style="text-align:right">
-                    <button class="btn btn-sm btn-primary" disabled="@string.IsNullOrWhiteSpace(_newCategoryName)" @onclick="AddCategoryAsync">Add</button>
-                </td>
-            </tr>
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <div class="section-label">Sync History</div>
@@ -113,23 +115,25 @@
     }
     else
     {
-        <table class="sync-table">
-            <tbody>
-                @foreach (var run in _runs)
-                {
-                    var ok = run.Status == SyncStatus.Success;
-                    <tr class="txn-row">
-                        <td style="width:180px">
-                            <span class="status-dot @(ok ? "ok" : "bad")"></span>
-                            @run.RanAt.ToLocalTime().ToString("MMM d · h:mm tt")
-                        </td>
-                        <td style="width:100px; color:@(ok ? "var(--emerald)" : "var(--crimson)"); font-size:.82rem; font-weight:600">@run.Status</td>
-                        <td>@run.NewTransactionCount new</td>
-                        <td class="muted" style="font-size:.8rem">@run.Error</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+        <div class="table-scroll">
+            <table class="sync-table">
+                <tbody>
+                    @foreach (var run in _runs)
+                    {
+                        var ok = run.Status == SyncStatus.Success;
+                        <tr class="txn-row">
+                            <td style="width:180px">
+                                <span class="status-dot @(ok ? "ok" : "bad")"></span>
+                                @run.RanAt.ToLocalTime().ToString("MMM d · h:mm tt")
+                            </td>
+                            <td style="width:100px; color:@(ok ? "var(--emerald)" : "var(--crimson)"); font-size:.82rem; font-weight:600">@run.Status</td>
+                            <td>@run.NewTransactionCount new</td>
+                            <td class="muted" style="font-size:.8rem">@run.Error</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     }
 </div>
 
