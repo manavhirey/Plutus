@@ -155,5 +155,39 @@ public sealed class SyncServiceTests : IDisposable
         Assert.Single(await db.SyncRuns.ToListAsync());
     }
 
+    [Fact]
+    public async Task RunAsync_stores_note_even_when_category_unknown()
+    {
+        // Arrange: seed a connection so sync runs.
+        await using (var seed = NewContext())
+        {
+            seed.SimpleFinConnections.Add(new SimpleFinConnection
+            {
+                AccessUrl = "https://user:pass@bridge.simplefin.org/simplefin",
+                CreatedAt = _time.GetUtcNow().UtcDateTime,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var set = AccountSetWith(
+            new SimpleFinTransaction("t-x", 1_700_000_500, "-12.00", "Mystery"));
+
+        var categorizer = new FakeCategorizer("NotARealCategory", suggestedNote: "Mystery merchant");
+
+        // Act
+        var run = await NewSync(new FakeSimpleFinClient(set), categorizer).RunAsync();
+        Assert.NotNull(run);
+        Assert.Equal(SyncStatus.Success, run!.Status);
+        Assert.Equal(1, run.NewTransactionCount);
+
+        // Assert: note is stored but transaction remains uncategorized.
+        await using var verify = NewContext();
+        var added = await verify.Transactions.AsNoTracking()
+            .SingleAsync(t => t.SimpleFinTransactionId == "t-x");
+        Assert.Equal("Mystery merchant", added.Note);
+        Assert.False(added.IsCategorized);
+        Assert.Null(added.CategoryId);
+    }
+
     public void Dispose() => _connection.Dispose();
 }
