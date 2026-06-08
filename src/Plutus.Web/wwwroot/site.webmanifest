@@ -1,0 +1,12 @@
+{
+  "name": "Plutus",
+  "short_name": "Plutus",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "theme_color": "#1F2A40",
+  "background_color": "#F4F5F6",
+  "display": "standalone",
+  "start_url": "/"
+}
