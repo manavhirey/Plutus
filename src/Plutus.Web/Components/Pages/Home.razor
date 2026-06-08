@@ -116,16 +116,29 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        _accounts = await db.Accounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync();
-        _needsReview = await db.Transactions.CountAsync(t => !t.IsReviewed);
-        _lastRun = await db.SyncRuns.AsNoTracking().OrderByDescending(r => r.RanAt).FirstOrDefaultAsync();
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _accounts = await db.Accounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync();
+            _needsReview = await db.Transactions.CountAsync(t => !t.IsReviewed);
+            _lastRun = await db.SyncRuns.AsNoTracking().OrderByDescending(r => r.RanAt).FirstOrDefaultAsync();
 
-        _spend = await SpendingReport.GetMonthlySpendingAsync(DateTime.Now.Year, DateTime.Now.Month);
-        _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
-        _chartStyle = $"height:{_spend.Count * 44 + 60}px";
-
-        _loading = false;
+            try
+            {
+                _spend = await SpendingReport.GetMonthlySpendingAsync(DateTime.Now.Year, DateTime.Now.Month);
+                _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
+                _chartStyle = $"height:{_spend.Count * 44 + 60}px";
+            }
+            catch
+            {
+                _spend = [];
+                _fills = [];
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private string FormatAsCurrency(object value)
