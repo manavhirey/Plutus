@@ -7,11 +7,14 @@ using Plutus.Core.Data;
 using Plutus.Core.SimpleFin;
 using Plutus.Web.BackgroundServices;
 using Plutus.Web.Components;
+using Radzen;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddRadzenComponents();
 
 // Persist the Data Protection key ring to disk so the encrypted SimpleFIN access
 // URL stays decryptable across restarts (this folder is a volume when containerized).
