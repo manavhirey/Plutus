@@ -16,6 +16,9 @@ public class Category
     /// <summary>True for built-in starter categories. Informational; system categories are still editable.</summary>
     public bool IsSystem { get; set; }
 
+    /// <summary>When true, transactions in this category are omitted from all spending totals and charts (e.g. Transfer).</summary>
+    public bool ExcludeFromSpending { get; set; }
+
     public int SortOrder { get; set; }
 
     public List<Transaction> Transactions { get; } = [];
