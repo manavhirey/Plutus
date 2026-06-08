@@ -1,5 +1,6 @@
 @page "/transactions"
 @inject IDbContextFactory<PlutusDbContext> DbFactory
+@using System.Globalization
 
 <PageTitle>Plutus — Transactions</PageTitle>
 
@@ -95,7 +96,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(param)) return 0;
         if (param.Equals("uncategorized", StringComparison.OrdinalIgnoreCase)) return -1;
-        if (int.TryParse(param, out var id) && id > 0) return id;
+        if (int.TryParse(param, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && id > 0) return id;
         return 0;
     }
 
