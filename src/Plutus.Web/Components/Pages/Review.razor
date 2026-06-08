@@ -50,6 +50,10 @@ else
                             {
                                 <span class="suggested-badge">AI suggested</span>
                             }
+                            @if (item.Refining)
+                            {
+                                <span class="suggested-badge" style="opacity:.6">Refining…</span>
+                            }
                         </label>
                         <select @bind="item.SelectedCategoryId">
                             <option value="0">Uncategorized</option>
@@ -68,12 +72,12 @@ else
                                 <span class="suggested-badge">AI suggested</span>
                             }
                         </label>
-                        <input type="text" @bind="item.Note" placeholder="e.g. birthday gift for Sam" />
+                        <input type="text" @bind="item.Note" @bind:after="() => RefineFromNoteAsync(item)" placeholder="e.g. birthday gift for Sam" />
                     </div>
                 </div>
 
                 <div class="review-actions">
-                    <button class="btn btn-primary" disabled="@item.Saving" @onclick="() => SaveAsync(item)">
+                    <button class="btn btn-primary" disabled="@(item.Saving || item.Refining)" @onclick="() => SaveAsync(item)">
                         @(item.Saving ? "Saving…" : "Confirm →")
                     </button>
                 </div>
@@ -122,24 +126,7 @@ else
         item.Saving = true;
 
         var note = NormalizeNote(item.Note);
-        var noteEdited = NoteEdited(item);
-        var manualOverride = item.SelectedCategoryId != item.OriginalCategoryId;
         int? categoryId = item.SelectedCategoryId == 0 ? null : item.SelectedCategoryId;
-
-        if (!manualOverride && noteEdited && note is not null)
-        {
-            var result = await Categorizer.CategorizeAsync(item.Description, note, _categories);
-            if (result is not null)
-            {
-                // Refine uses only the category; the user's note is authoritative, so result.Note is ignored.
-                var match = _categories.FirstOrDefault(
-                    c => string.Equals(c.Name, result.Category, StringComparison.OrdinalIgnoreCase));
-                if (match is not null)
-                {
-                    categoryId = match.Id;
-                }
-            }
-        }
 
         await using var db = await DbFactory.CreateDbContextAsync();
         var transaction = await db.Transactions.FirstOrDefaultAsync(t => t.Id == item.Id);
@@ -154,6 +141,35 @@ else
         }
 
         _items.Remove(item);
+    }
+
+    private async Task RefineFromNoteAsync(ReviewItem item)
+    {
+        // Only refine when the note actually changed from the loaded suggestion and is non-empty.
+        var note = NormalizeNote(item.Note);
+        if (!NoteEdited(item) || note is null)
+        {
+            return;
+        }
+        item.Refining = true;
+        try
+        {
+            var result = await Categorizer.CategorizeAsync(item.Description, note, _categories);
+            if (result is not null)
+            {
+                var match = _categories.FirstOrDefault(
+                    c => string.Equals(c.Name, result.Category, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                {
+                    item.SelectedCategoryId = match.Id; // live update — user sees the refined category
+                }
+            }
+            // On failure/no-match: leave the dropdown as-is so the user can pick; nothing silent.
+        }
+        finally
+        {
+            item.Refining = false;
+        }
     }
 
     private static string? NormalizeNote(string? value) =>
@@ -175,5 +191,6 @@ else
         public bool HasSuggestion { get; init; }
         public bool HasNoteSuggestion { get; init; }
         public bool Saving { get; set; }
+        public bool Refining { get; set; }
     }
 }
