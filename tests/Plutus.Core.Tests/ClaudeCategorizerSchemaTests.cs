@@ -35,4 +35,19 @@ public sealed class ClaudeCategorizerSchemaTests
 
         Assert.False(format.Schema["additionalProperties"].GetBoolean());
     }
+
+    [Fact]
+    public void NormalizeNote_returns_null_for_null_empty_and_whitespace()
+    {
+        Assert.Null(ClaudeCategorizer.NormalizeNote(null));
+        Assert.Null(ClaudeCategorizer.NormalizeNote(""));
+        Assert.Null(ClaudeCategorizer.NormalizeNote("   "));
+    }
+
+    [Fact]
+    public void NormalizeNote_trims_and_preserves_inner_content()
+    {
+        Assert.Equal("Coffee", ClaudeCategorizer.NormalizeNote("  Coffee  "));
+        Assert.Equal("a b", ClaudeCategorizer.NormalizeNote("a b"));
+    }
 }

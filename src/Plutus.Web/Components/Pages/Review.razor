@@ -46,7 +46,7 @@ else
                     <div class="field" style="margin-bottom:0">
                         <label>
                             Category
-                            @if (item.HasSuggestion)
+                            @if (item.HasSuggestion && item.SelectedCategoryId == item.OriginalCategoryId)
                             {
                                 <span class="suggested-badge">AI suggested</span>
                             }
@@ -131,6 +131,7 @@ else
             var result = await Categorizer.CategorizeAsync(item.Description, note, _categories);
             if (result is not null)
             {
+                // Refine uses only the category; the user's note is authoritative, so result.Note is ignored.
                 var match = _categories.FirstOrDefault(
                     c => string.Equals(c.Name, result.Category, StringComparison.OrdinalIgnoreCase));
                 if (match is not null)
