@@ -126,7 +126,8 @@ in the Transactions list (tagged), so a mistake is correctable by recategorizing
    bucket drops and net worth/top category look right, then unset and redeploy.
 4. `/code-review`, then merge.
 
-## Open questions
+## Resolved decisions
 
-- Transfer badge styling — reuse the existing category-chip style (muted) vs a
-  dedicated treatment. (Minor; default to muted chip.)
+- **Transfer badge styling:** reuse the existing category-chip style (the same
+  chip used for categories elsewhere), rendered for the `Transfer` category. No
+  dedicated/bespoke treatment.
