@@ -21,14 +21,15 @@
 
 
 #components-reconnect-modal {
-    background-color: #1c2030;
-    color: #e8e6df;
-    width: 20rem;
+    /* White card on the brand paper surface */
+    background-color: #FFFFFF;
+    color: #1F2A40;
+    width: 22rem;
     margin: 20vh auto;
-    padding: 2rem;
-    border: 1px solid #2a2f45;
-    border-radius: 10px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.6);
+    padding: 2rem 2rem 1.75rem;
+    border: 1px solid rgba(31, 42, 64, .16);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(31, 42, 64, .13);
     opacity: 0;
     transition: display 0.5s allow-discrete, overlay 0.5s allow-discrete;
     animation: components-reconnect-modal-fadeOutOpacity 0.5s both;
@@ -42,7 +43,7 @@
 }
 
 #components-reconnect-modal::backdrop {
-    background-color: rgba(0, 0, 0, 0.4);
+    background-color: rgba(31, 42, 64, 0.35);
     animation: components-reconnect-modal-fadeInOpacity 0.5s ease-in-out;
     opacity: 1;
 }
@@ -87,27 +88,35 @@
 #components-reconnect-modal p {
     margin: 0;
     text-align: center;
+    font-family: 'Hanken Grotesk', system-ui, sans-serif;
+    font-size: 0.9rem;
+    color: #1F2A40;
 }
 
+/* Azure primary button */
 #components-reconnect-modal button {
     border: 0;
-    background-color: #d4a847;
-    color: #0d0f14;
+    background-color: #3D72FF;
+    color: #FFFFFF;
     font-weight: 700;
-    padding: 6px 24px;
+    padding: 8px 28px;
     border-radius: 6px;
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: 'Hanken Grotesk', system-ui, sans-serif;
+    font-size: 0.875rem;
+    letter-spacing: 0.02em;
     cursor: pointer;
+    transition: background 140ms ease;
 }
 
     #components-reconnect-modal button:hover {
-        background-color: #c49a3c;
+        background-color: #2d60e8;
     }
 
     #components-reconnect-modal button:active {
-        background-color: #d4a847;
+        background-color: #3D72FF;
     }
 
+/* Ripple animation in Azure */
 .components-rejoining-animation {
     position: relative;
     width: 80px;
@@ -116,7 +125,7 @@
 
     .components-rejoining-animation div {
         position: absolute;
-        border: 3px solid #d4a847;
+        border: 3px solid #3D72FF;
         opacity: 1;
         border-radius: 50%;
         animation: components-rejoining-animation 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;

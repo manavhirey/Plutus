@@ -23,7 +23,7 @@ else
             <div class="stat-value @(_needsReview > 0 ? "highlight" : "")">@_needsReview</div>
             @if (_needsReview > 0)
             {
-                <a href="review" class="muted" style="font-size:.78rem; text-decoration:none; color:var(--amber);">Review now →</a>
+                <a href="review" class="muted" style="font-size:.78rem; text-decoration:none; color:var(--accent);">Review now →</a>
             }
             else
             {
@@ -35,7 +35,7 @@ else
             <div class="stat-label">Last Sync</div>
             @if (_lastRun is null)
             {
-                <div class="stat-value" style="font-size:1rem; color:var(--text-muted)">Never</div>
+                <div class="stat-value" style="font-size:1rem; color:var(--gray)">Never</div>
                 <span class="muted">Connect SimpleFIN in Settings</span>
             }
             else
@@ -56,7 +56,7 @@ else
         <div class="empty-state">
             <div class="empty-icon">🏦</div>
             <p style="font-weight:600; color:var(--text); margin-bottom:.35rem">No accounts connected</p>
-            <p><a href="settings" style="color:var(--amber); text-decoration:none">Connect SimpleFIN in Settings</a> to start syncing.</p>
+            <p><a href="settings" style="color:var(--accent); text-decoration:none">Connect SimpleFIN in Settings</a> to start syncing.</p>
         </div>
     }
     else

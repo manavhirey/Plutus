@@ -1,67 +1,89 @@
 /* ============================================================
-   Plutus — Design System
-   Palette: deep slate, warm amber, legible mono numerics
-   Fonts: DM Serif Display (brand) · DM Sans (body) · DM Mono (numbers)
+   Plutus — Brand Design System
+   Palette: Ink Navy + Paper (light) + Azure accent
+   Fonts: Space Grotesk (display) · Hanken Grotesk (body) · Space Mono (labels)
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
-/* ── Tokens ─────────────────────────────────────────────── */
+/* ── Brand Tokens ─────────────────────────────────────────── */
 :root {
-    --bg:           #0d0f14;
-    --bg-raised:    #12151c;
-    --bg-float:     #171b25;
-    --surface:      #1c2030;
-    --surface-hi:   #232840;
-    --border:       #2a2f45;
-    --border-hi:    #3a4060;
+    /* Palette */
+    --ink:          #1F2A40;
+    --ink-deep:     #161E2F;
+    --gray:         #808184;
+    --gray-lt:      #C7C8C9;
+    --paper:        #F4F5F6;
+    --white:        #FFFFFF;
+    --accent:       #3D72FF;   /* Azure */
 
-    --text:         #e8e6df;
-    --text-muted:   #7a7f95;
-    --text-dim:     #4a4f65;
+    /* Derived surfaces */
+    --sidebar-bg:   var(--ink);
+    --content-bg:   var(--paper);
+    --card-bg:      var(--white);
 
-    --amber:        #d4a847;
-    --amber-soft:   rgba(212, 168, 71, 0.12);
-    --amber-glow:   rgba(212, 168, 71, 0.25);
+    /* Borders */
+    --border:       rgba(31, 42, 64, .16);   /* hairline on paper */
+    --border-hi:    rgba(31, 42, 64, .30);
 
-    --emerald:      #34d399;
-    --emerald-soft: rgba(52, 211, 153, 0.10);
+    /* Text */
+    --text:         var(--ink);
+    --text-muted:   var(--gray);
+    --text-dim:     var(--gray-lt);
 
-    --crimson:      #f87171;
-    --crimson-soft: rgba(248, 113, 113, 0.10);
+    /* Semantic colors (keep functional; now lighter versions) */
+    --emerald:      #16a34a;
+    --emerald-soft: rgba(22, 163, 74, 0.09);
 
-    --blue:         #60a5fa;
-    --blue-soft:    rgba(96, 165, 250, 0.10);
+    --crimson:      #dc2626;
+    --crimson-soft: rgba(220, 38, 38, 0.09);
 
+    --accent-soft:  rgba(61, 114, 255, 0.10);
+
+    /* Radii */
     --radius-sm:    6px;
     --radius:       10px;
-    --radius-lg:    14px;
+    --radius-lg:    12px;
 
-    --shadow-sm:    0 1px 3px rgba(0,0,0,.4);
-    --shadow:       0 4px 16px rgba(0,0,0,.5);
-    --shadow-lg:    0 8px 32px rgba(0,0,0,.6);
+    /* Shadows — lighter on white */
+    --shadow-sm:    0 1px 4px rgba(31, 42, 64, .08);
+    --shadow:       0 4px 16px rgba(31, 42, 64, .10);
+    --shadow-lg:    0 8px 32px rgba(31, 42, 64, .13);
 
-    --sidebar-w:    220px;
-    --content-max:  900px;
+    /* Layout */
+    --sidebar-w:    228px;
+    --content-max:  920px;
 
-    --font-body:    'DM Sans', system-ui, sans-serif;
-    --font-mono:    'DM Mono', 'Menlo', 'Consolas', monospace;
-    --font-serif:   'DM Serif Display', Georgia, serif;
+    /* Fonts */
+    --font-display: 'Space Grotesk', system-ui, sans-serif;
+    --font-body:    'Hanken Grotesk', system-ui, sans-serif;
+    --font-mono:    'Space Mono', 'Menlo', 'Consolas', monospace;
 
-    --transition:   150ms cubic-bezier(.4,0,.2,1);
+    --transition:   140ms cubic-bezier(.4, 0, .2, 1);
+
+    /* ── Compatibility aliases (inline styles in pages still reference these) ── */
+    --text:         var(--ink);
+    --text-muted:   var(--gray);
+    --text-dim:     var(--gray-lt);
+    --surface:      var(--white);
+    --amber:        var(--accent);   /* old amber → Azure accent */
+    --bg-float:     var(--paper);
 }
 
 /* ── Reset ───────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
+
 html, body {
-    margin: 0; padding: 0;
-    background: var(--bg);
-    color: var(--text);
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
     font-family: var(--font-body);
     font-size: 14px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
 }
+
 h1, h2, h3, h4 { margin: 0; }
 a { color: inherit; }
 button { font-family: inherit; }
@@ -72,12 +94,12 @@ button { font-family: inherit; }
     min-height: 100vh;
 }
 
-/* ── Sidebar ──────────────────────────────────────────────── */
+/* ── Sidebar — Ink chrome ─────────────────────────────────── */
 .sidebar {
     width: var(--sidebar-w);
     min-height: 100vh;
-    background: var(--bg-raised);
-    border-right: 1px solid var(--border);
+    background: var(--ink);
+    border-right: none;
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -87,37 +109,40 @@ button { font-family: inherit; }
     padding: 0 0 2rem;
 }
 
+/* Brand lockup in sidebar: dove + wordmark (both white) */
 .sidebar-brand {
-    padding: 1.75rem 1.5rem 1.25rem;
-    border-bottom: 1px solid var(--border);
-    display: block;
+    padding: 1.5rem 1.25rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, .10);
+    display: flex;
+    align-items: center;
+    gap: 10px;
     text-decoration: none;
+    flex-shrink: 0;
 }
 
-.sidebar-brand-name {
-    font-family: var(--font-serif);
-    font-size: 1.6rem;
-    color: var(--amber);
-    letter-spacing: -0.02em;
-    line-height: 1;
+.sidebar-dove {
+    height: 32px;
+    width: auto;
     display: block;
+    flex-shrink: 0;
 }
 
-.sidebar-brand-sub {
-    font-size: 0.7rem;
-    font-weight: 500;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-dim);
+.sidebar-wordmark {
+    height: 16px;
+    width: auto;
     display: block;
-    margin-top: 0.2rem;
+    flex-shrink: 0;
 }
 
+/* Legacy — hidden if markup uses old class */
+.sidebar-logo { display: none; }
+
+/* ── Sidebar Nav ──────────────────────────────────────────── */
 .sidebar-nav {
     padding: 1rem 0.75rem;
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
+    gap: 0.1rem;
     flex: 1;
 }
 
@@ -127,24 +152,27 @@ button { font-family: inherit; }
     gap: 0.6rem;
     padding: 0.55rem 0.85rem;
     border-radius: var(--radius-sm);
-    color: var(--text-muted);
+    color: rgba(244, 245, 246, 0.65);   /* paper/65 */
     text-decoration: none;
+    font-family: var(--font-body);
     font-size: 0.875rem;
     font-weight: 500;
     transition: background var(--transition), color var(--transition);
     position: relative;
+    letter-spacing: 0.01em;
 }
 
 .sidebar-nav a:hover {
-    background: var(--surface);
-    color: var(--text);
+    background: rgba(255, 255, 255, .08);
+    color: #F4F5F6;
 }
 
 .sidebar-nav a.active {
-    background: var(--amber-soft);
-    color: var(--amber);
+    background: rgba(61, 114, 255, .22);
+    color: #FFFFFF;
 }
 
+/* Azure left-edge indicator */
 .sidebar-nav a.active::before {
     content: '';
     position: absolute;
@@ -153,7 +181,7 @@ button { font-family: inherit; }
     transform: translateY(-50%);
     width: 3px;
     height: 60%;
-    background: var(--amber);
+    background: var(--accent);
     border-radius: 0 2px 2px 0;
 }
 
@@ -166,54 +194,125 @@ button { font-family: inherit; }
 }
 .sidebar-nav a.active .nav-icon { opacity: 1; }
 
-/* ── Main Content ─────────────────────────────────────────── */
+/* Review badge */
+.nav-badge {
+    margin-left: auto;
+    background: var(--accent);
+    color: #FFFFFF;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0.1rem 0.42rem;
+    border-radius: 999px;
+    line-height: 1.4;
+    letter-spacing: 0.04em;
+}
+
+/* ── Main Content — Paper ─────────────────────────────────── */
 .content {
     margin-left: var(--sidebar-w);
     flex: 1;
     max-width: calc(var(--sidebar-w) + var(--content-max));
     padding: 2.5rem 2.5rem 5rem;
+    background: var(--paper);
+    min-height: 100vh;
 }
 
-/* ── Page Header ──────────────────────────────────────────── */
+/* ── Page Header — kicker style ──────────────────────────── */
 .page-header {
     margin-bottom: 2rem;
 }
 
+/* Main page title: Space Grotesk display */
 .page-title {
-    font-size: 1.4rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    line-height: 1.1;
 }
 
+/* Sub-line: Space Mono kicker */
 .page-title-sub {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-top: 0.15rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.5rem;
     font-family: var(--font-mono);
-    letter-spacing: 0.05em;
+    font-size: 0.68rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gray);
+}
+
+/* Azure dot before kicker text */
+.page-title-sub::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
 h1 {
-    font-size: 1.4rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--ink);
     margin-bottom: 1.5rem;
 }
 
+/* Section labels = Space Mono kicker */
 h2 {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 400;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--gray);
     margin: 2rem 0 0.75rem;
 }
 
-/* ── Cards ────────────────────────────────────────────────── */
+/* ── Section Label — with hairline rule ──────────────────── */
+.section-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 2rem 0 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 400;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gray);
+}
+
+/* Azure dot */
+.section-label::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Hairline rule after label */
+.section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+/* ── Cards / Panels — White on Paper ────────────────────── */
 .card {
-    background: var(--surface);
+    background: var(--white);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
@@ -227,9 +326,9 @@ h2 {
     gap: 1rem;
 }
 
-/* Stat card variant */
+/* ── Stat Card ───────────────────────────────────────────── */
 .stat-card {
-    background: var(--surface);
+    background: var(--white);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 1.25rem 1.5rem;
@@ -238,72 +337,47 @@ h2 {
     transition: border-color var(--transition), box-shadow var(--transition);
 }
 
-.stat-card::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--border-hi), transparent);
-}
-
 .stat-card:hover {
     border-color: var(--border-hi);
     box-shadow: var(--shadow);
 }
 
 .stat-label {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 400;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--gray);
     margin-bottom: 0.5rem;
 }
 
 .stat-value {
-    font-family: var(--font-mono);
-    font-size: 1.6rem;
-    font-weight: 500;
-    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 1.7rem;
+    font-weight: 600;
+    color: var(--ink);
     line-height: 1;
     margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
 }
 
 .stat-value.highlight {
-    color: var(--amber);
+    color: var(--accent);
 }
 
-/* ── Section label ────────────────────────────────────────── */
-.section-label {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    margin: 2rem 0 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.section-label::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-}
-
-/* ── Muted / utility ──────────────────────────────────────── */
+/* ── Muted / utility ─────────────────────────────────────── */
 .muted {
-    color: var(--text-muted);
+    color: var(--gray);
     font-size: 0.8rem;
 }
 
-/* ── Amount display ───────────────────────────────────────── */
+/* ── Amount display ──────────────────────────────────────── */
 .amount {
-    font-family: var(--font-mono);
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
 }
 
 .amount-expense {
@@ -315,31 +389,33 @@ h2 {
 }
 
 .amount-neutral {
-    color: var(--text);
+    color: var(--ink);
 }
 
-/* ── Chips / Tags ─────────────────────────────────────────── */
+/* ── Chips / Tags ────────────────────────────────────────── */
 .chip {
     display: inline-flex;
     align-items: center;
     padding: 0.2rem 0.6rem;
     border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: rgba(255,255,255,0.9);
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.95);
     white-space: nowrap;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
-/* ── Buttons ──────────────────────────────────────────────── */
+/* ── Buttons ─────────────────────────────────────────────── */
 .btn {
     appearance: none;
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
     border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
+    background: var(--white);
+    color: var(--ink);
     padding: 0.5rem 1rem;
     border-radius: var(--radius-sm);
     font-family: var(--font-body);
@@ -348,10 +424,11 @@ h2 {
     cursor: pointer;
     transition: background var(--transition), border-color var(--transition), color var(--transition);
     white-space: nowrap;
+    letter-spacing: 0.01em;
 }
 
 .btn:hover:not(:disabled) {
-    background: var(--surface-hi);
+    background: var(--paper);
     border-color: var(--border-hi);
 }
 
@@ -360,26 +437,28 @@ h2 {
     cursor: not-allowed;
 }
 
+/* Primary = Azure pill */
 .btn-primary {
-    background: var(--amber);
-    border-color: var(--amber);
-    color: #0d0f14;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #FFFFFF;
     font-weight: 700;
+    letter-spacing: 0.02em;
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: #c49a3c;
-    border-color: #c49a3c;
+    background: #2d60e8;
+    border-color: #2d60e8;
 }
 
 .btn-danger {
     color: var(--crimson);
-    border-color: rgba(248,113,113,0.25);
+    border-color: rgba(220, 38, 38, 0.25);
     background: var(--crimson-soft);
 }
 
 .btn-danger:hover:not(:disabled) {
-    background: rgba(248,113,113,0.18);
+    background: rgba(220, 38, 38, 0.15);
     border-color: var(--crimson);
 }
 
@@ -388,7 +467,7 @@ h2 {
     font-size: 0.78rem;
 }
 
-/* ── Form Controls ────────────────────────────────────────── */
+/* ── Form Controls ───────────────────────────────────────── */
 input[type=text],
 input[type=password],
 input[type=number],
@@ -396,10 +475,10 @@ select,
 textarea {
     width: 100%;
     padding: 0.55rem 0.75rem;
-    background: var(--bg-float);
+    background: var(--paper);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    color: var(--text);
+    color: var(--ink);
     font-family: var(--font-body);
     font-size: 0.875rem;
     transition: border-color var(--transition), box-shadow var(--transition);
@@ -407,7 +486,7 @@ textarea {
 }
 
 input[type=number] {
-    font-family: var(--font-mono);
+    font-family: var(--font-display);
 }
 
 input[type=text]:focus,
@@ -416,20 +495,21 @@ input[type=number]:focus,
 select:focus,
 textarea:focus {
     outline: none;
-    border-color: var(--amber);
-    box-shadow: 0 0 0 3px var(--amber-soft);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237a7f95' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23808184' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.75rem center;
     padding-right: 2rem;
+    cursor: pointer;
 }
 
 select option {
-    background: var(--bg-float);
-    color: var(--text);
+    background: var(--white);
+    color: var(--ink);
 }
 
 .field {
@@ -437,11 +517,14 @@ select option {
 }
 
 .field label {
-    display: block;
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    color: var(--gray);
     margin-bottom: 0.35rem;
     text-transform: uppercase;
 }
@@ -452,7 +535,7 @@ select option {
     align-items: center;
 }
 
-/* ── Tables ───────────────────────────────────────────────── */
+/* ── Tables ──────────────────────────────────────────────── */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -465,17 +548,19 @@ td, th {
 }
 
 th {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 400;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--gray);
     border-bottom: 1px solid var(--border);
     padding-bottom: 0.75rem;
 }
 
 .txn-row td {
     border-top: 1px solid var(--border);
+    color: var(--ink);
 }
 
 .txn-row:first-child td {
@@ -487,10 +572,10 @@ th {
 }
 
 .txn-row:hover td {
-    background: var(--bg-float);
+    background: var(--paper);
 }
 
-/* ── Day group header ─────────────────────────────────────── */
+/* ── Day group header ────────────────────────────────────── */
 .day-header {
     display: flex;
     justify-content: space-between;
@@ -503,21 +588,23 @@ th {
 }
 
 .day-header .day {
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 400;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--gray);
 }
 
 .day-header .total {
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-muted);
+    font-family: var(--font-display);
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--gray);
+    letter-spacing: -0.01em;
 }
 
-/* ── Transaction filter row ───────────────────────────────── */
+/* ── Transaction filter row ──────────────────────────────── */
 .filter-row {
     display: flex;
     align-items: center;
@@ -532,7 +619,7 @@ th {
     min-width: 180px;
 }
 
-/* ── Review cards ─────────────────────────────────────────── */
+/* ── Review cards ────────────────────────────────────────── */
 .review-stack {
     display: flex;
     flex-direction: column;
@@ -540,15 +627,16 @@ th {
 }
 
 .review-card {
-    background: var(--surface);
+    background: var(--white);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 1.25rem 1.5rem;
-    transition: border-color var(--transition);
+    transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .review-card:hover {
     border-color: var(--border-hi);
+    box-shadow: var(--shadow);
 }
 
 .review-head {
@@ -567,26 +655,28 @@ th {
 
 .review-date {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--text-dim);
-    letter-spacing: 0.04em;
+    font-size: 0.65rem;
+    color: var(--gray);
+    letter-spacing: 0.1em;
     text-transform: uppercase;
 }
 
 .review-desc {
+    font-family: var(--font-display);
     font-weight: 600;
     font-size: 0.95rem;
-    color: var(--text);
+    color: var(--ink);
     line-height: 1.3;
+    letter-spacing: -0.01em;
 }
 
 .review-amount {
-    font-family: var(--font-mono);
+    font-family: var(--font-display);
     font-size: 1.1rem;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--crimson);
     white-space: nowrap;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
 }
 
 .review-fields {
@@ -611,26 +701,28 @@ th {
     border-top: 1px solid var(--border);
 }
 
+/* AI suggested badge — azure accent */
 .suggested-badge {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 400;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--amber);
-    background: var(--amber-soft);
+    color: var(--accent);
+    background: var(--accent-soft);
     padding: 0.15rem 0.5rem;
     border-radius: 999px;
     margin-left: 0.5rem;
 }
 
-/* ── Status indicators ────────────────────────────────────── */
+/* ── Status indicators ───────────────────────────────────── */
 .status-dot {
     display: inline-block;
-    width: 0.55rem;
-    height: 0.55rem;
+    width: 0.5rem;
+    height: 0.5rem;
     border-radius: 50%;
     margin-right: 0.4rem;
     vertical-align: middle;
@@ -639,19 +731,19 @@ th {
 
 .status-dot.ok {
     background: var(--emerald);
-    box-shadow: 0 0 5px rgba(52, 211, 153, 0.5);
+    box-shadow: 0 0 5px rgba(22, 163, 74, 0.4);
 }
 
 .status-dot.bad {
     background: var(--crimson);
-    box-shadow: 0 0 5px rgba(248, 113, 113, 0.5);
+    box-shadow: 0 0 5px rgba(220, 38, 38, 0.4);
 }
 
 .status-dot.none {
-    background: var(--text-dim);
+    background: var(--gray-lt);
 }
 
-/* ── Banners ──────────────────────────────────────────────── */
+/* ── Banners ─────────────────────────────────────────────── */
 .banner {
     padding: 0.75rem 1rem;
     border-radius: var(--radius);
@@ -666,23 +758,23 @@ th {
 .banner-success {
     background: var(--emerald-soft);
     color: var(--emerald);
-    border: 1px solid rgba(52, 211, 153, 0.2);
+    border: 1px solid rgba(22, 163, 74, 0.2);
 }
 
 .banner-error {
     background: var(--crimson-soft);
     color: var(--crimson);
-    border: 1px solid rgba(248, 113, 113, 0.2);
+    border: 1px solid rgba(220, 38, 38, 0.2);
 }
 
-/* ── Empty states ─────────────────────────────────────────── */
+/* ── Empty states ────────────────────────────────────────── */
 .empty-state {
-    background: var(--surface);
+    background: var(--white);
     border: 1px dashed var(--border);
     border-radius: var(--radius-lg);
     padding: 3rem 2rem;
     text-align: center;
-    color: var(--text-muted);
+    color: var(--gray);
 }
 
 .empty-state .empty-icon {
@@ -696,22 +788,23 @@ th {
     font-size: 0.875rem;
 }
 
-/* ── Loading skeleton ─────────────────────────────────────── */
+/* ── Loading ─────────────────────────────────────────────── */
 .loading-text {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    color: var(--text-dim);
+    color: var(--gray);
     font-size: 0.85rem;
     font-family: var(--font-mono);
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .loading-spinner {
     width: 14px;
     height: 14px;
     border: 2px solid var(--border);
-    border-top-color: var(--amber);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     flex-shrink: 0;
@@ -721,7 +814,7 @@ th {
     to { transform: rotate(360deg); }
 }
 
-/* ── Settings-specific ────────────────────────────────────── */
+/* ── Settings-specific ───────────────────────────────────── */
 .settings-section {
     margin-bottom: 2rem;
 }
@@ -731,22 +824,24 @@ th {
     align-items: center;
     gap: 0.6rem;
     padding: 0.75rem 1rem;
-    background: var(--bg-float);
+    background: var(--paper);
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     margin-bottom: 1rem;
     font-size: 0.875rem;
+    color: var(--ink);
 }
 
 .sync-table td:first-child {
     font-family: var(--font-mono);
-    font-size: 0.82rem;
-    color: var(--text-muted);
+    font-size: 0.78rem;
+    color: var(--gray);
 }
 
 .sync-table td:nth-child(3) {
     font-family: var(--font-mono);
-    font-size: 0.82rem;
-    color: var(--text-dim);
+    font-size: 0.78rem;
+    color: var(--gray);
 }
 
 /* Category color preview */
@@ -757,7 +852,7 @@ th {
     flex-shrink: 0;
 }
 
-/* ── Blazor error/reconnect ───────────────────────────────── */
+/* ── Blazor error / validation ───────────────────────────── */
 h1:focus { outline: none; }
 
 .valid.modified:not([type=checkbox]) {
@@ -776,7 +871,7 @@ h1:focus { outline: none; }
 
 .blazor-error-boundary {
     background: var(--crimson-soft);
-    border: 1px solid rgba(248,113,113,0.3);
+    border: 1px solid rgba(220, 38, 38, 0.3);
     padding: 1rem 1.5rem;
     border-radius: var(--radius);
     color: var(--crimson);
@@ -787,11 +882,10 @@ h1:focus { outline: none; }
 }
 
 #blazor-error-ui {
-    color-scheme: dark;
-    background: var(--surface);
-    border-top: 1px solid var(--crimson);
+    background: var(--white);
+    border-top: 2px solid var(--crimson);
     bottom: 0;
-    box-shadow: 0 -4px 24px rgba(0,0,0,.5);
+    box-shadow: 0 -4px 24px rgba(31, 42, 64, .12);
     box-sizing: border-box;
     display: none;
     left: 0;
@@ -800,7 +894,7 @@ h1:focus { outline: none; }
     width: 100%;
     z-index: 1000;
     font-size: 0.875rem;
-    color: var(--text);
+    color: var(--ink);
 }
 
 #blazor-error-ui .dismiss {
@@ -808,21 +902,21 @@ h1:focus { outline: none; }
     position: absolute;
     right: 1rem;
     top: 0.75rem;
-    color: var(--text-muted);
+    color: var(--gray);
 }
 
 #blazor-error-ui a.reload {
-    color: var(--amber);
+    color: var(--accent);
     font-weight: 600;
     text-decoration: none;
 }
 
-/* ── Darker border checkbox ───────────────────────────────── */
+/* ── Checkbox border ─────────────────────────────────────── */
 .darker-border-checkbox.form-check-input {
     border-color: var(--border-hi);
 }
 
-/* ── Responsive: collapse sidebar on small screens ────────── */
+/* ── Responsive: mobile bar ──────────────────────────────── */
 @media (max-width: 768px) {
     .sidebar {
         width: 100%;
@@ -833,7 +927,7 @@ h1:focus { outline: none; }
         padding: 0 1rem;
         height: 56px;
         border-right: none;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid rgba(255, 255, 255, .10);
     }
 
     .sidebar-brand {
@@ -841,8 +935,13 @@ h1:focus { outline: none; }
         border-bottom: none;
     }
 
-    .sidebar-brand-sub { display: none; }
-    .sidebar-brand-name { font-size: 1.3rem; }
+    .sidebar-dove {
+        height: 26px;
+    }
+
+    .sidebar-wordmark {
+        height: 13px;
+    }
 
     .sidebar-nav {
         flex-direction: row;
@@ -867,11 +966,11 @@ h1:focus { outline: none; }
     }
 }
 
-/* ── Page-load animations ─────────────────────────────────── */
+/* ── Page-load animation ─────────────────────────────────── */
 @keyframes fadeSlideUp {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(8px);
     }
     to {
         opacity: 1;
@@ -883,35 +982,23 @@ h1:focus { outline: none; }
     animation: fadeSlideUp 0.3s ease-out both;
 }
 
-.card-grid .stat-card:nth-child(1) { animation-delay: 0.05s; }
-.card-grid .stat-card:nth-child(2) { animation-delay: 0.10s; }
-.card-grid .stat-card:nth-child(3) { animation-delay: 0.15s; }
-.card-grid .stat-card:nth-child(4) { animation-delay: 0.20s; }
+.card-grid .stat-card:nth-child(1) { animation-delay: 0.04s; }
+.card-grid .stat-card:nth-child(2) { animation-delay: 0.08s; }
+.card-grid .stat-card:nth-child(3) { animation-delay: 0.12s; }
+.card-grid .stat-card:nth-child(4) { animation-delay: 0.16s; }
 
-/* ── Counts badge ─────────────────────────────────────────── */
-.nav-badge {
-    margin-left: auto;
-    background: var(--amber);
-    color: #0d0f14;
-    font-size: 0.65rem;
-    font-weight: 700;
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-    line-height: 1.4;
-}
-
-/* ── Scrollbar styling ────────────────────────────────────── */
+/* ── Scrollbar ───────────────────────────────────────────── */
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
 }
 ::-webkit-scrollbar-track {
-    background: var(--bg);
+    background: var(--paper);
 }
 ::-webkit-scrollbar-thumb {
-    background: var(--border-hi);
+    background: var(--gray-lt);
     border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-dim);
+    background: var(--gray);
 }
