@@ -170,7 +170,15 @@ else
                 _fills = [];
             }
 
-            _netWorth = await NetWorthReport.GetAsync();
+            try
+            {
+                _netWorth = await NetWorthReport.GetAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to load net worth for the dashboard.");
+                _netWorth = null;
+            }
         }
         finally
         {
