@@ -1,6 +1,8 @@
 @page "/"
 @inject IDbContextFactory<PlutusDbContext> DbFactory
 @inject ISpendingReport SpendingReport
+@inject INetWorthReport NetWorthReport
+@using Plutus.Core.Reporting
 @inject NavigationManager Nav
 @inject ILogger<Home> Logger
 
@@ -48,6 +50,33 @@ else
                     <span class="status-dot @(ok ? "ok" : "bad")"></span>@_lastRun.Status
                 </div>
                 <span class="muted">@_lastRun.RanAt.ToLocalTime().ToString("MMM d · h:mm tt") · @_lastRun.NewTransactionCount new</span>
+            }
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-label">Net Worth</div>
+            @if (_netWorth is null)
+            {
+                <div class="stat-value" style="font-size:1rem; color:var(--gray)">—</div>
+            }
+            else
+            {
+                <div class="stat-value amount" style="font-size:1.4rem">@Money.Plain(_netWorth.Total)</div>
+                <span class="muted">Assets @Money.Plain(_netWorth.Assets) · Cards @Money.Plain(_netWorth.Cards)</span>
+            }
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-label">Top Category · This Month</div>
+            @if (_topCategory is null)
+            {
+                <div class="stat-value" style="font-size:1rem; color:var(--gray)">—</div>
+                <span class="muted">No spending yet</span>
+            }
+            else
+            {
+                <div class="stat-value amount" style="font-size:1.4rem">@Money.Plain(_topCategory.Total)</div>
+                <span class="muted">@_topCategory.Name · @($"{_topCategory.Share:P0}") of spend</span>
             }
         </div>
     </div>
@@ -112,6 +141,8 @@ else
     private IReadOnlyList<CategorySpend> _spend = [];
     private IEnumerable<string> _fills = [];
     private string _chartStyle = "height:300px";
+    private NetWorth? _netWorth;
+    private TopCategory? _topCategory;
 
     private const string GrayFallback = "#808184";
 
@@ -130,12 +161,23 @@ else
                 _spend = await SpendingReport.GetMonthlySpendingAsync(now.Year, now.Month);
                 _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
                 _chartStyle = $"height:{_spend.Count * 44 + 60}px";
+                _topCategory = SpendingInsights.Top(_spend);
             }
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Failed to load monthly spending for the dashboard chart.");
                 _spend = [];
                 _fills = [];
+            }
+
+            try
+            {
+                _netWorth = await NetWorthReport.GetAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to load net worth for the dashboard.");
+                _netWorth = null;
             }
         }
         finally

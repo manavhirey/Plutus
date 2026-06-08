@@ -7,6 +7,7 @@ using Plutus.Core.Categorization;
 using Plutus.Core.Data;
 using Plutus.Core.Models;
 using Plutus.Core.SimpleFin;
+using Plutus.Core.Transfers;
 
 namespace Plutus.Core.Sync;
 
@@ -50,7 +51,13 @@ public sealed class SyncService(
                 .ToListAsync(ct);
 
             var newTransactions = await IngestAsync(db, set, ct);
-            await CategorizeAsync(db, newTransactions, categories, now.UtcDateTime, ct);
+
+            var accountRefs = await db.Accounts
+                .AsNoTracking()
+                .Select(a => new SyncedAccountRef(a.Id, a.Name, a.Org))
+                .ToListAsync(ct);
+
+            await CategorizeAsync(db, newTransactions, categories, accountRefs, now.UtcDateTime, ct);
 
             run.Status = SyncStatus.Success;
             run.NewTransactionCount = newTransactions.Count;
@@ -158,11 +165,16 @@ public sealed class SyncService(
         return newTransactions;
     }
 
-    /// <summary>Description-only categorization pass over the freshly inserted transactions.</summary>
+    /// <summary>
+    /// Categorizes freshly inserted transactions. Payments to synced accounts are flagged
+    /// as transfers (excluded from spending) without an AI call; everything else is sent to
+    /// the categorizer as before.
+    /// </summary>
     private async Task CategorizeAsync(
         PlutusDbContext db,
         List<Transaction> transactions,
         IReadOnlyList<Category> categories,
+        IReadOnlyList<SyncedAccountRef> accounts,
         DateTime categorizedAt,
         CancellationToken ct)
     {
@@ -172,9 +184,21 @@ public sealed class SyncService(
         }
 
         var byName = categories.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
+        byName.TryGetValue("Transfer", out var transferCategory);
 
         foreach (var transaction in transactions)
         {
+            if (transferCategory is not null &&
+                TransferDetector.IsTransferPayment(transaction.Description, transaction.AccountId, accounts))
+            {
+                transaction.CategoryId = transferCategory.Id;
+                transaction.IsCategorized = true;
+                transaction.IsReviewed = true; // transfers don't need manual review
+                transaction.CategorizedAt = categorizedAt;
+                transaction.Note = "Transfer — excluded from spending";
+                continue;
+            }
+
             var result = await categorizer.CategorizeAsync(transaction.Description, note: null, categories, ct);
             if (result is not null)
             {

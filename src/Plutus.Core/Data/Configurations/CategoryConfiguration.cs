@@ -43,5 +43,15 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
                 SortOrder = i,
             };
         }
+
+        yield return new Category
+        {
+            Id = names.Length + 1, // 13
+            Name = "Transfer",
+            Color = "#94A3B8", // muted slate
+            IsSystem = true,
+            ExcludeFromSpending = true,
+            SortOrder = names.Length, // 12
+        };
     }
 }
