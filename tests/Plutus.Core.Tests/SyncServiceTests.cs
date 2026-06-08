@@ -76,7 +76,7 @@ public sealed class SyncServiceTests : IDisposable
             new SimpleFinTransaction("t-credit", 1_700_000_600, "50.00", "Refund"), // credit, dropped
             new SimpleFinTransaction("dup1", 1_700_000_700, "-5.00", "Existing")); // duplicate, skipped
 
-        var categorizer = new FakeCategorizer("Dining");
+        var categorizer = new FakeCategorizer("Dining", suggestedNote: "Coffee shop");
 
         // Act
         var run = await NewSync(new FakeSimpleFinClient(set), categorizer).RunAsync();
@@ -95,6 +95,7 @@ public sealed class SyncServiceTests : IDisposable
         Assert.True(added.IsCategorized);
         var dining = await verify.Categories.SingleAsync(c => c.Name == "Dining");
         Assert.Equal(dining.Id, added.CategoryId);
+        Assert.Equal("Coffee shop", added.Note);
 
         var connection = await verify.SimpleFinConnections.SingleAsync();
         Assert.Equal(_time.GetUtcNow().UtcDateTime, connection.LastSyncedAt);
