@@ -1,22 +1,4 @@
 services:
-  # Reverse proxy — exposes the app on port 80 at the machine's IP.
-  traefik:
-    image: traefik:v3.3
-    container_name: plutus-traefik
-    restart: unless-stopped
-    # File provider instead of the Docker provider: this host's daemon enforces a
-    # minimum API version Traefik's docker client can't meet. The file routes to the
-    # app by its compose DNS name, so no Docker socket is needed.
-    command:
-      - --entrypoints.web.address=:80
-      - --providers.file.filename=/etc/traefik/dynamic.yml
-    ports:
-      # Host :80 is taken by an existing Caddy proxy on this VPS, so Plutus's Traefik
-      # listens on :8081. Change to "80:80" if you free up port 80.
-      - "8081:80"
-    volumes:
-      - ./deploy/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-
   # One-shot init: the app runs as non-root (uid 1654), but a fresh named volume
   # is root-owned. This grants the app ownership of the data dir before it starts.
   plutus-init:
@@ -29,6 +11,11 @@ services:
     image: plutus:latest
     container_name: plutus
     restart: unless-stopped
+    # Loopback-only publish so the host Caddy can reverse-proxy to the app and
+    # terminate TLS for plutus.kunigami.cloud. Bound to 127.0.0.1 so the app is
+    # never reachable unencrypted from outside the host.
+    ports:
+      - "127.0.0.1:8080:8080"
     depends_on:
       plutus-init:
         condition: service_completed_successfully
