@@ -61,7 +61,13 @@ else
                     </div>
 
                     <div class="field" style="margin-bottom:0">
-                        <label>Note</label>
+                        <label>
+                            Note
+                            @if (item.HasNoteSuggestion && !NoteEdited(item))
+                            {
+                                <span class="suggested-badge">AI suggested</span>
+                            }
+                        </label>
                         <input type="text" @bind="item.Note" placeholder="e.g. birthday gift for Sam" />
                     </div>
                 </div>
@@ -102,7 +108,9 @@ else
                 OriginalCategoryId = t.CategoryId ?? 0,
                 SelectedCategoryId = t.CategoryId ?? 0,
                 Note = t.Note,
+                OriginalNote = t.Note,
                 HasSuggestion = t.CategoryId is not null,
+                HasNoteSuggestion = !string.IsNullOrWhiteSpace(t.Note),
             });
         }
 
@@ -113,13 +121,12 @@ else
     {
         item.Saving = true;
 
-        var note = string.IsNullOrWhiteSpace(item.Note) ? null : item.Note!.Trim();
+        var note = NormalizeNote(item.Note);
+        var noteEdited = NoteEdited(item);
         var manualOverride = item.SelectedCategoryId != item.OriginalCategoryId;
         int? categoryId = item.SelectedCategoryId == 0 ? null : item.SelectedCategoryId;
 
-        // The note refines the category — unless the user manually changed the dropdown
-        // (a manual override skips the Claude call, per design).
-        if (!manualOverride && note is not null)
+        if (!manualOverride && noteEdited && note is not null)
         {
             var result = await Categorizer.CategorizeAsync(item.Description, note, _categories);
             if (result is not null)
@@ -148,6 +155,12 @@ else
         _items.Remove(item);
     }
 
+    private static string? NormalizeNote(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool NoteEdited(ReviewItem item) =>
+        !string.Equals(NormalizeNote(item.Note), NormalizeNote(item.OriginalNote), StringComparison.Ordinal);
+
     private sealed class ReviewItem
     {
         public int Id { get; init; }
@@ -157,7 +170,9 @@ else
         public int OriginalCategoryId { get; init; }
         public int SelectedCategoryId { get; set; }
         public string? Note { get; set; }
+        public string? OriginalNote { get; init; }
         public bool HasSuggestion { get; init; }
+        public bool HasNoteSuggestion { get; init; }
         public bool Saving { get; set; }
     }
 }

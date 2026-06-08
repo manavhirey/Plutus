@@ -22,7 +22,7 @@ public class Transaction
 
     public required string Description { get; set; }
 
-    /// <summary>User-written note. Saving a note triggers a re-categorization pass.</summary>
+    /// <summary>Free-text note — AI-suggested at sync, editable by the user. Editing the note on Review can refine the category.</summary>
     public string? Note { get; set; }
 
     public int? CategoryId { get; set; }

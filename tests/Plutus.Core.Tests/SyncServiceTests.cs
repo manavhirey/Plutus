@@ -76,7 +76,7 @@ public sealed class SyncServiceTests : IDisposable
             new SimpleFinTransaction("t-credit", 1_700_000_600, "50.00", "Refund"), // credit, dropped
             new SimpleFinTransaction("dup1", 1_700_000_700, "-5.00", "Existing")); // duplicate, skipped
 
-        var categorizer = new FakeCategorizer("Dining");
+        var categorizer = new FakeCategorizer("Dining", suggestedNote: "Coffee shop");
 
         // Act
         var run = await NewSync(new FakeSimpleFinClient(set), categorizer).RunAsync();
@@ -95,6 +95,7 @@ public sealed class SyncServiceTests : IDisposable
         Assert.True(added.IsCategorized);
         var dining = await verify.Categories.SingleAsync(c => c.Name == "Dining");
         Assert.Equal(dining.Id, added.CategoryId);
+        Assert.Equal("Coffee shop", added.Note);
 
         var connection = await verify.SimpleFinConnections.SingleAsync();
         Assert.Equal(_time.GetUtcNow().UtcDateTime, connection.LastSyncedAt);
@@ -152,6 +153,40 @@ public sealed class SyncServiceTests : IDisposable
         Assert.Contains("boom", run.Error);
         await using var db = NewContext();
         Assert.Single(await db.SyncRuns.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RunAsync_stores_note_even_when_category_unknown()
+    {
+        // Arrange: seed a connection so sync runs.
+        await using (var seed = NewContext())
+        {
+            seed.SimpleFinConnections.Add(new SimpleFinConnection
+            {
+                AccessUrl = "https://user:pass@bridge.simplefin.org/simplefin",
+                CreatedAt = _time.GetUtcNow().UtcDateTime,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var set = AccountSetWith(
+            new SimpleFinTransaction("t-x", 1_700_000_500, "-12.00", "Mystery"));
+
+        var categorizer = new FakeCategorizer("NotARealCategory", suggestedNote: "Mystery merchant");
+
+        // Act
+        var run = await NewSync(new FakeSimpleFinClient(set), categorizer).RunAsync();
+        Assert.NotNull(run);
+        Assert.Equal(SyncStatus.Success, run!.Status);
+        Assert.Equal(1, run.NewTransactionCount);
+
+        // Assert: note is stored but transaction remains uncategorized.
+        await using var verify = NewContext();
+        var added = await verify.Transactions.AsNoTracking()
+            .SingleAsync(t => t.SimpleFinTransactionId == "t-x");
+        Assert.Equal("Mystery merchant", added.Note);
+        Assert.False(added.IsCategorized);
+        Assert.Null(added.CategoryId);
     }
 
     public void Dispose() => _connection.Dispose();

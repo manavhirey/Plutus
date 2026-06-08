@@ -23,7 +23,12 @@ public sealed class ClaudeCategorizer(
         "You are a personal-finance assistant that classifies a single bank transaction into " +
         "exactly one spending category. Choose the closest fit from the allowed categories. " +
         "When a user note is provided, weight it heavily — it describes what the purchase actually was. " +
-        "Set confidence to your probability (0–1) that the category is correct.";
+        "Set confidence to your probability (0–1) that the category is correct. " +
+        "Also produce a 'note': a concise 3–8 word plain-English description decoded from the bank description " +
+        "(e.g. 'AMZN MKTP US*2K4...' → 'Amazon Marketplace purchase'). " +
+        "If the description is already clear, lightly normalize it. " +
+        "Do NOT invent context that cannot be inferred — no guessed people, occasions, or specific amounts. " +
+        "If a user note is provided, use it to inform the category but still base the note on the bank description.";
 
     public async Task<CategorizationResult?> CategorizeAsync(
         string description,
@@ -81,7 +86,8 @@ public sealed class ClaudeCategorizer(
                 return null;
             }
 
-            return new CategorizationResult(match.Name, parsed.Confidence);
+            var modelNote = string.IsNullOrWhiteSpace(parsed.Note) ? null : parsed.Note.Trim();
+            return new CategorizationResult(match.Name, modelNote, parsed.Confidence);
         }
         catch (Exception ex)
         {
@@ -112,9 +118,10 @@ public sealed class ClaudeCategorizer(
             ["properties"] = JsonSerializer.SerializeToElement(new
             {
                 category = new { type = "string", @enum = names },
+                note = new { type = "string" },
                 confidence = new { type = "number" },
             }),
-            ["required"] = JsonSerializer.SerializeToElement(new[] { "category", "confidence" }),
+            ["required"] = JsonSerializer.SerializeToElement(new[] { "category", "note", "confidence" }),
             ["additionalProperties"] = JsonSerializer.SerializeToElement(false),
         };
 
@@ -123,5 +130,6 @@ public sealed class ClaudeCategorizer(
 
     private sealed record CategorizationJson(
         [property: JsonPropertyName("category")] string Category,
+        [property: JsonPropertyName("note")] string? Note,
         [property: JsonPropertyName("confidence")] double Confidence);
 }

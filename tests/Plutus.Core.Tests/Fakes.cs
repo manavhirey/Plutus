@@ -35,14 +35,14 @@ internal sealed class FakeSimpleFinClient(SimpleFinAccountSet? result = null, Ex
 }
 
 /// <summary>Always returns the same category with a fixed confidence.</summary>
-internal sealed class FakeCategorizer(string category, double confidence = 0.9) : ICategorizer
+internal sealed class FakeCategorizer(string category, string? suggestedNote = null, double confidence = 0.9) : ICategorizer
 {
     public int Calls { get; private set; }
 
     public Task<CategorizationResult?> CategorizeAsync(string description, string? note, IReadOnlyList<Category> categories, CancellationToken ct = default)
     {
         Calls++;
-        return Task.FromResult<CategorizationResult?>(new CategorizationResult(category, confidence));
+        return Task.FromResult<CategorizationResult?>(new CategorizationResult(category, suggestedNote, confidence));
     }
 }
 

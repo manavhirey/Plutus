@@ -176,11 +176,15 @@ public sealed class SyncService(
         foreach (var transaction in transactions)
         {
             var result = await categorizer.CategorizeAsync(transaction.Description, note: null, categories, ct);
-            if (result is not null && byName.TryGetValue(result.Category, out var category))
+            if (result is not null)
             {
-                transaction.CategoryId = category.Id;
-                transaction.IsCategorized = true;
-                transaction.CategorizedAt = categorizedAt;
+                transaction.Note = result.Note;
+                if (byName.TryGetValue(result.Category, out var category))
+                {
+                    transaction.CategoryId = category.Id;
+                    transaction.IsCategorized = true;
+                    transaction.CategorizedAt = categorizedAt;
+                }
             }
         }
 

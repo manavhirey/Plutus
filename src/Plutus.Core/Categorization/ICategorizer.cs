@@ -2,8 +2,8 @@ using Plutus.Core.Models;
 
 namespace Plutus.Core.Categorization;
 
-/// <summary>The category Claude selected, plus its confidence (0–1).</summary>
-public sealed record CategorizationResult(string Category, double Confidence);
+/// <summary>The category Claude selected, a suggested plain-English note, and its confidence (0–1).</summary>
+public sealed record CategorizationResult(string Category, string? Note, double Confidence);
 
 public interface ICategorizer
 {
