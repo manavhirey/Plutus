@@ -189,5 +189,51 @@ public sealed class SyncServiceTests : IDisposable
         Assert.Null(added.CategoryId);
     }
 
+    [Fact]
+    public async Task RunAsync_marks_payment_to_synced_card_as_Transfer_without_categorizing()
+    {
+        await using (var seed = NewContext())
+        {
+            seed.SimpleFinConnections.Add(new SimpleFinConnection
+            {
+                AccessUrl = "https://user:pass@bridge.simplefin.org/simplefin",
+                CreatedAt = _time.GetUtcNow().UtcDateTime,
+            });
+            // A synced credit card, so its last-4 is known to the detector.
+            seed.Accounts.Add(new Account
+            {
+                SimpleFinAccountId = "card1",
+                Name = "Chase Freedom Unlimited (7463)",
+                Org = "Chase Bank",
+                Currency = "USD",
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        // Sync returns the checking account ("acc1") with a payment to card 7463.
+        var set = new SimpleFinAccountSet(
+        [
+            new SimpleFinAccount("acc1", "CHASE COLLEGE (0670)", "USD", "1000.00", 1_700_000_000,
+                new SimpleFinOrg("Chase Bank", null),
+            [
+                new SimpleFinTransaction("pmt1", 1_700_000_500, "-783.13", "Payment to Chase card ending in 7463 06/04"),
+            ]),
+        ], null);
+
+        var categorizer = new FakeCategorizer("Fees");
+        var run = await NewSync(new FakeSimpleFinClient(set), categorizer).RunAsync();
+
+        Assert.NotNull(run);
+        Assert.Equal(SyncStatus.Success, run!.Status);
+
+        await using var verify = NewContext();
+        var transfer = await verify.Categories.FirstAsync(c => c.Name == "Transfer");
+        var txn = await verify.Transactions.AsNoTracking().FirstAsync(t => t.SimpleFinTransactionId == "pmt1");
+        Assert.Equal(transfer.Id, txn.CategoryId);
+        Assert.True(txn.IsCategorized);
+        Assert.True(txn.IsReviewed);
+        Assert.Equal(0, categorizer.Calls); // detection short-circuits the Claude call
+    }
+
     public void Dispose() => _connection.Dispose();
 }
