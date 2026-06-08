@@ -16,10 +16,17 @@ public sealed class SpendingReport(IDbContextFactory<PlutusDbContext> dbFactory)
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
+        var excludedCategoryIds = await db.Categories
+            .AsNoTracking()
+            .Where(c => c.ExcludeFromSpending)
+            .Select(c => c.Id)
+            .ToListAsync(ct);
+
         // Group transactions in the window by CategoryId, summing Amount.
         var rows = await db.Transactions
             .AsNoTracking()
             .Where(t => t.PostedDate >= startUtc && t.PostedDate < endUtc)
+            .Where(t => t.CategoryId == null || !excludedCategoryIds.Contains(t.CategoryId.Value))
             .GroupBy(t => t.CategoryId)
             .Select(g => new { CategoryId = g.Key, Total = g.Sum(t => t.Amount) })
             .ToListAsync(ct);

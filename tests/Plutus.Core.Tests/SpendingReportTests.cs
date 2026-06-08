@@ -204,5 +204,22 @@ public sealed class SpendingReportTests : IDisposable
         Assert.Equal(42.00m, result[0].Total);
     }
 
+    [Fact]
+    public async Task GetMonthlySpending_excludes_ExcludeFromSpending_categories()
+    {
+        const int dining = 2;    // seeded
+        const int transfer = 13; // seeded, ExcludeFromSpending = true
+
+        await AddTransactionAsync(2026, 6, 10, 40m, dining);
+        await AddTransactionAsync(2026, 6, 11, 783m, transfer); // must be excluded
+
+        var result = await NewReport().GetMonthlySpendingAsync(2026, 6);
+
+        Assert.Single(result);
+        Assert.Equal("Dining", result[0].Name);
+        Assert.Equal(40m, result[0].Total);
+        Assert.DoesNotContain(result, r => r.Name == "Transfer");
+    }
+
     public void Dispose() => _connection.Dispose();
 }
