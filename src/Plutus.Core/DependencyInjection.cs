@@ -55,6 +55,7 @@ public static class DependencyInjection
         services.AddScoped<ISimpleFinConnectionService, SimpleFinConnectionService>();
         services.AddScoped<ISyncService, SyncService>();
         services.AddScoped<ISpendingReport, SpendingReport>();
+        services.AddScoped<INetWorthReport, NetWorthReport>();
 
         return services;
     }
