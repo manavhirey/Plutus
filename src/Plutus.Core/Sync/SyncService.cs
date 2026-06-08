@@ -11,7 +11,7 @@ using Plutus.Core.SimpleFin;
 namespace Plutus.Core.Sync;
 
 public sealed class SyncService(
-    PlutusDbContext db,
+    IDbContextFactory<PlutusDbContext> dbFactory,
     ISimpleFinClient simpleFin,
     ICategorizer categorizer,
     IConnectionProtector protector,
@@ -21,6 +21,9 @@ public sealed class SyncService(
 {
     public async Task<SyncRun?> RunAsync(CancellationToken ct = default)
     {
+        // One short-lived context for the whole run; never shared across calls.
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+
         var connection = await db.SimpleFinConnections.FirstOrDefaultAsync(ct);
         if (connection is null)
         {
@@ -46,8 +49,8 @@ public sealed class SyncService(
                 .OrderBy(c => c.SortOrder)
                 .ToListAsync(ct);
 
-            var newTransactions = await IngestAsync(set, ct);
-            await CategorizeAsync(newTransactions, categories, now.UtcDateTime, ct);
+            var newTransactions = await IngestAsync(db, set, ct);
+            await CategorizeAsync(db, newTransactions, categories, now.UtcDateTime, ct);
 
             run.Status = SyncStatus.Success;
             run.NewTransactionCount = newTransactions.Count;
@@ -67,7 +70,7 @@ public sealed class SyncService(
     }
 
     /// <summary>Upserts accounts and inserts new expense transactions (credits dropped, deduped).</summary>
-    private async Task<List<Transaction>> IngestAsync(SimpleFinAccountSet set, CancellationToken ct)
+    private async Task<List<Transaction>> IngestAsync(PlutusDbContext db, SimpleFinAccountSet set, CancellationToken ct)
     {
         // Map incoming accounts to tracked entities (existing or new).
         var incomingAccountIds = set.Accounts.Select(a => a.Id).ToList();
@@ -75,11 +78,27 @@ public sealed class SyncService(
             .Where(a => incomingAccountIds.Contains(a.SimpleFinAccountId))
             .ToDictionaryAsync(a => a.SimpleFinAccountId, ct);
 
-        // Gather candidate expense transactions and dedupe against what's already stored.
-        var candidates = set.Accounts
-            .SelectMany(a => (a.Transactions ?? []).Select(t => (Account: a, Txn: t)))
-            .Where(x => ParseAmount(x.Txn.Amount) < 0m) // negative = money out = expense
-            .ToList();
+        // Gather candidate expense transactions and dedupe against what's already stored. A
+        // single malformed amount string from the bridge is skipped (with a warning) rather
+        // than thrown — one bad record must not fail the whole sync.
+        var candidates = new List<(SimpleFinAccount Account, SimpleFinTransaction Txn, decimal Amount)>();
+        foreach (var account in set.Accounts)
+        {
+            foreach (var txn in account.Transactions ?? [])
+            {
+                if (!TryParseAmount(txn.Amount, out var amount))
+                {
+                    logger.LogWarning(
+                        "Skipping transaction {Id}: unparseable amount '{Amount}'.", txn.Id, txn.Amount);
+                    continue;
+                }
+
+                if (amount < 0m) // negative = money out = expense
+                {
+                    candidates.Add((account, txn, amount));
+                }
+            }
+        }
 
         var candidateIds = candidates.Select(x => x.Txn.Id).ToList();
         var existingTxnIds = await db.Transactions
@@ -99,12 +118,22 @@ public sealed class SyncService(
             account.Name = sfAccount.Name;
             account.Org = sfAccount.Org?.Name ?? sfAccount.Org?.Domain;
             account.Currency = sfAccount.Currency;
-            account.Balance = ParseAmount(sfAccount.Balance);
+            if (TryParseAmount(sfAccount.Balance, out var balance))
+            {
+                account.Balance = balance;
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Account {Id}: unparseable balance '{Balance}'; leaving previous value.",
+                    sfAccount.Id, sfAccount.Balance);
+            }
+
             account.BalanceDate = DateTimeOffset.FromUnixTimeSeconds(sfAccount.BalanceDate).UtcDateTime;
         }
 
         var newTransactions = new List<Transaction>();
-        foreach (var (sfAccount, sfTxn) in candidates)
+        foreach (var (sfAccount, sfTxn, amount) in candidates)
         {
             if (!existingTxnIds.Add(sfTxn.Id))
             {
@@ -116,7 +145,7 @@ public sealed class SyncService(
                 SimpleFinTransactionId = sfTxn.Id,
                 Account = existingAccounts[sfAccount.Id],
                 PostedDate = DateTimeOffset.FromUnixTimeSeconds(sfTxn.Posted).UtcDateTime,
-                Amount = Math.Abs(ParseAmount(sfTxn.Amount)),
+                Amount = Math.Abs(amount),
                 Description = sfTxn.Description,
                 IsCategorized = false,
                 IsReviewed = false,
@@ -131,6 +160,7 @@ public sealed class SyncService(
 
     /// <summary>Description-only categorization pass over the freshly inserted transactions.</summary>
     private async Task CategorizeAsync(
+        PlutusDbContext db,
         List<Transaction> transactions,
         IReadOnlyList<Category> categories,
         DateTime categorizedAt,
@@ -157,6 +187,7 @@ public sealed class SyncService(
         await db.SaveChangesAsync(ct);
     }
 
-    private static decimal ParseAmount(string amount) =>
-        decimal.Parse(amount, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+    private static bool TryParseAmount(string amount, out decimal value) =>
+        decimal.TryParse(
+            amount, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value);
 }

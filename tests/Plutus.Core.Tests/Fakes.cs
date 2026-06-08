@@ -1,9 +1,18 @@
+using Microsoft.EntityFrameworkCore;
 using Plutus.Core.Abstractions;
 using Plutus.Core.Categorization;
+using Plutus.Core.Data;
 using Plutus.Core.Models;
 using Plutus.Core.SimpleFin;
 
 namespace Plutus.Core.Tests;
+
+/// <summary>Hands out fresh contexts over the same (shared in-memory) options, like production.</summary>
+internal sealed class TestDbContextFactory(DbContextOptions<PlutusDbContext> options)
+    : IDbContextFactory<PlutusDbContext>
+{
+    public PlutusDbContext CreateDbContext() => new(options);
+}
 
 /// <summary>Returns a canned account set (or throws) without any network I/O.</summary>
 internal sealed class FakeSimpleFinClient(SimpleFinAccountSet? result = null, Exception? throws = null) : ISimpleFinClient

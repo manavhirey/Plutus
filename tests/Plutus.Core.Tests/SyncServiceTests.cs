@@ -28,8 +28,8 @@ public sealed class SyncServiceTests : IDisposable
 
     private PlutusDbContext NewContext() => new(_options);
 
-    private SyncService NewSync(PlutusDbContext db, ISimpleFinClient client, FakeCategorizer categorizer) =>
-        new(db, client, categorizer, new PassthroughProtector(),
+    private SyncService NewSync(ISimpleFinClient client, FakeCategorizer categorizer) =>
+        new(new TestDbContextFactory(_options), client, categorizer, new PassthroughProtector(),
             Options.Create(new SyncOptions()), _time, NullLogger<SyncService>.Instance);
 
     private static SimpleFinAccountSet AccountSetWith(params SimpleFinTransaction[] txns) =>
@@ -39,7 +39,7 @@ public sealed class SyncServiceTests : IDisposable
     public async Task RunAsync_returns_null_when_no_connection()
     {
         await using var db = NewContext();
-        var sync = NewSync(db, new FakeSimpleFinClient(), new FakeCategorizer("Dining"));
+        var sync = NewSync(new FakeSimpleFinClient(), new FakeCategorizer("Dining"));
 
         var run = await sync.RunAsync();
 
@@ -79,13 +79,10 @@ public sealed class SyncServiceTests : IDisposable
         var categorizer = new FakeCategorizer("Dining");
 
         // Act
-        await using (var db = NewContext())
-        {
-            var run = await NewSync(db, new FakeSimpleFinClient(set), categorizer).RunAsync();
-            Assert.NotNull(run);
-            Assert.Equal(SyncStatus.Success, run!.Status);
-            Assert.Equal(1, run.NewTransactionCount);
-        }
+        var run = await NewSync(new FakeSimpleFinClient(set), categorizer).RunAsync();
+        Assert.NotNull(run);
+        Assert.Equal(SyncStatus.Success, run!.Status);
+        Assert.Equal(1, run.NewTransactionCount);
 
         // Assert: only the new expense was added; credit dropped; dup skipped; categorized.
         await using var verify = NewContext();
@@ -104,6 +101,36 @@ public sealed class SyncServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_skips_transactions_with_unparseable_amounts()
+    {
+        await using (var seed = NewContext())
+        {
+            seed.SimpleFinConnections.Add(new SimpleFinConnection
+            {
+                AccessUrl = "https://user:pass@bridge.simplefin.org/simplefin",
+                CreatedAt = _time.GetUtcNow().UtcDateTime,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var set = AccountSetWith(
+            new SimpleFinTransaction("t-good", 1_700_000_500, "-10.00", "Coffee"), // valid expense
+            new SimpleFinTransaction("t-bad", 1_700_000_600, "n/a", "Glitchy")); // malformed amount
+
+        // Act: the bad record must not blow up the whole run.
+        var run = await NewSync(new FakeSimpleFinClient(set), new FakeCategorizer("Dining")).RunAsync();
+
+        Assert.NotNull(run);
+        Assert.Equal(SyncStatus.Success, run!.Status);
+        Assert.Equal(1, run.NewTransactionCount);
+
+        await using var verify = NewContext();
+        var transactions = await verify.Transactions.AsNoTracking().ToListAsync();
+        Assert.Single(transactions);
+        Assert.Equal("t-good", transactions[0].SimpleFinTransactionId);
+    }
+
+    [Fact]
     public async Task RunAsync_records_failure_when_client_throws()
     {
         await using (var seed = NewContext())
@@ -118,12 +145,12 @@ public sealed class SyncServiceTests : IDisposable
 
         var failing = new FakeSimpleFinClient(throws: new HttpRequestException("boom"));
 
-        await using var db = NewContext();
-        var run = await NewSync(db, failing, new FakeCategorizer("Dining")).RunAsync();
+        var run = await NewSync(failing, new FakeCategorizer("Dining")).RunAsync();
 
         Assert.NotNull(run);
         Assert.Equal(SyncStatus.Failed, run!.Status);
         Assert.Contains("boom", run.Error);
+        await using var db = NewContext();
         Assert.Single(await db.SyncRuns.ToListAsync());
     }
 

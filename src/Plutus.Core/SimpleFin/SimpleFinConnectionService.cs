@@ -6,7 +6,7 @@ using Plutus.Core.Models;
 namespace Plutus.Core.SimpleFin;
 
 public sealed class SimpleFinConnectionService(
-    PlutusDbContext db,
+    IDbContextFactory<PlutusDbContext> dbFactory,
     ISimpleFinClient client,
     IConnectionProtector protector,
     TimeProvider timeProvider) : ISimpleFinConnectionService
@@ -16,6 +16,8 @@ public sealed class SimpleFinConnectionService(
         var accessUrl = await client.ClaimAsync(setupToken, ct);
         var encrypted = protector.Protect(accessUrl);
         var now = timeProvider.GetUtcNow().UtcDateTime;
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var existing = await db.SimpleFinConnections.FirstOrDefaultAsync(ct);
         if (existing is null)
@@ -33,6 +35,9 @@ public sealed class SimpleFinConnectionService(
         await db.SaveChangesAsync(ct);
     }
 
-    public Task<SimpleFinConnection?> GetConnectionAsync(CancellationToken ct = default) =>
-        db.SimpleFinConnections.FirstOrDefaultAsync(ct);
+    public async Task<SimpleFinConnection?> GetConnectionAsync(CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.SimpleFinConnections.AsNoTracking().FirstOrDefaultAsync(ct);
+    }
 }

@@ -22,10 +22,12 @@ public static class DependencyInjection
         IConfiguration configuration,
         string connectionString)
     {
-        // Factory for Blazor components (one context per operation, no cross-render sharing),
-        // plus a scoped registration so Core services can take PlutusDbContext directly.
+        // A DbContext factory is the only registration: every consumer (Blazor components,
+        // the sync services, the scheduler) creates a short-lived context per operation. A
+        // single scoped DbContext would be shared across a whole Blazor circuit, and a
+        // DbContext is not thread-safe — two overlapping async calls on one circuit would
+        // throw "a second operation was started on this context".
         services.AddDbContextFactory<PlutusDbContext>(options => options.UseSqlite(connectionString));
-        services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<PlutusDbContext>>().CreateDbContext());
 
         services.AddOptions<ClaudeOptions>().Bind(configuration.GetSection(ClaudeOptions.SectionName));
         services.AddOptions<SyncOptions>().Bind(configuration.GetSection(SyncOptions.SectionName));
@@ -33,10 +35,16 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
 
         // API key comes from ANTHROPIC_API_KEY (env / user-secrets); never from config or DB.
-        services.AddSingleton(_ => new AnthropicClient
+        // Fail fast at startup rather than letting every categorization fail silently later.
+        var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"),
-        });
+            throw new InvalidOperationException(
+                "ANTHROPIC_API_KEY is not set. Plutus needs it to categorize transactions — " +
+                "provide it via environment variable or user-secrets before starting the app.");
+        }
+
+        services.AddSingleton(_ => new AnthropicClient { ApiKey = apiKey });
 
         services.AddHttpClient<ISimpleFinClient, SimpleFinClient>()
             .AddStandardResilienceHandler();

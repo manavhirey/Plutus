@@ -43,10 +43,12 @@ public sealed class DailySyncScheduler(
     private async Task CatchUpAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<PlutusDbContext>();
+        var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PlutusDbContext>>();
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var todayUtc = timeProvider.GetUtcNow().UtcDateTime.Date;
         var ranToday = await db.SyncRuns
+            .AsNoTracking()
             .AnyAsync(r => r.Status == SyncStatus.Success && r.RanAt >= todayUtc, ct);
 
         if (ranToday)
