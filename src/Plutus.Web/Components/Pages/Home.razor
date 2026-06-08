@@ -94,15 +94,12 @@ else
         else
         {
             <RadzenChart SeriesClick="@OnSeriesClick" Style="@_chartStyle">
-                <RadzenColumnSeries TItem="CategorySpend"
-                                    Data="@_spend"
-                                    CategoryProperty="Name"
-                                    ValueProperty="Total"
-                                    Fills="@_fills"
-                                    Title="Spending" />
-                <RadzenCategoryAxis LabelAutoRotation="-45">
-                    <RadzenAxisTitle Text="Category" />
-                </RadzenCategoryAxis>
+                <RadzenBarSeries TItem="CategorySpend"
+                                 Data="@_spend"
+                                 CategoryProperty="Name"
+                                 ValueProperty="Total"
+                                 Fills="@_fills"
+                                 Title="Spending" />
                 <RadzenValueAxis Formatter="@FormatAsCurrency">
                     <RadzenAxisTitle Text="Amount ($)" />
                 </RadzenValueAxis>
@@ -163,7 +160,7 @@ else
                 var now = DateTime.Now;
                 _spend = await SpendingReport.GetMonthlySpendingAsync(now.Year, now.Month);
                 _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
-                _chartStyle = "height:340px";
+                _chartStyle = $"height:{_spend.Count * 44 + 60}px";
                 _topCategory = SpendingInsights.Top(_spend);
             }
             catch (Exception ex)
