@@ -86,7 +86,8 @@ public sealed class ClaudeCategorizer(
                 return null;
             }
 
-            return new CategorizationResult(match.Name, parsed.Note, parsed.Confidence);
+            var modelNote = string.IsNullOrWhiteSpace(parsed.Note) ? null : parsed.Note.Trim();
+            return new CategorizationResult(match.Name, modelNote, parsed.Confidence);
         }
         catch (Exception ex)
         {
