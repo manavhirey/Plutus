@@ -28,6 +28,10 @@ services:
       # Persist the SQLite DB and the Data Protection key ring onto the volume.
       - Plutus__Database__Path=/data/plutus.db
       - Plutus__DataProtectionKeysPath=/data/keys
+      # One-off note backfill: set PLUTUS_BACKFILL_NOTES=true in .env to run once, then unset.
+      - Plutus__Backfill__Notes=${PLUTUS_BACKFILL_NOTES:-false}
+      # One-off transfer backfill: set PLUTUS_BACKFILL_TRANSFERS=true in .env to run once, then unset.
+      - Plutus__Backfill__Transfers=${PLUTUS_BACKFILL_TRANSFERS:-false}
       # Optional overrides:
       # - Plutus__Sync__DailyTime=06:00
       # - Plutus__Claude__Model=claude-haiku-4-5
