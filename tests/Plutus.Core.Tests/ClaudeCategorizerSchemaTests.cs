@@ -30,6 +30,9 @@ public sealed class ClaudeCategorizerSchemaTests
         Assert.Contains("category", required);
         Assert.Contains("confidence", required);
 
+        Assert.Equal("string", properties.GetProperty("note").GetProperty("type").GetString());
+        Assert.Contains("note", required);
+
         Assert.False(format.Schema["additionalProperties"].GetBoolean());
     }
 }
