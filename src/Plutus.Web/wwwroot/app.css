@@ -575,6 +575,17 @@ th {
     background: var(--paper);
 }
 
+/* ── Transaction table column widths ────────────────────── */
+.txn-cat {
+    width: 150px;
+}
+
+.txn-amount {
+    width: 120px;
+    text-align: right;
+    font-size: 0.9rem;
+}
+
 /* ── Day group header ────────────────────────────────────── */
 .day-header {
     display: flex;
@@ -615,6 +626,12 @@ th {
 }
 
 .filter-row select {
+    width: auto;
+    min-width: 180px;
+}
+
+/* Filter select: auto width on desktop, full on mobile */
+.filter-select {
     width: auto;
     min-width: 180px;
 }
@@ -916,8 +933,19 @@ h1:focus { outline: none; }
     border-color: var(--border-hi);
 }
 
+/* ── Table scroll wrapper — used on wide tables for mobile ── */
+.table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 /* ── Responsive: mobile bar ──────────────────────────────── */
 @media (max-width: 768px) {
+    .app-shell {
+        flex-direction: column;
+    }
+
     .sidebar {
         width: 100%;
         min-height: auto;
@@ -963,6 +991,173 @@ h1:focus { outline: none; }
     .content {
         margin-left: 0;
         padding: 1.5rem 1rem 4rem;
+    }
+}
+
+/* ── Mobile: narrow viewport (≤ 430px) ───────────────────── */
+@media (max-width: 430px) {
+
+    /* ── Nav: icon-only to save horizontal space ── */
+    .sidebar-nav a {
+        padding: 0.45rem 0.55rem;
+        font-size: 0;          /* hide text */
+        gap: 0;
+    }
+
+    /* Keep icons visible */
+    .sidebar-nav a .nav-icon {
+        width: 20px;
+        height: 20px;
+        opacity: 1;
+        font-size: initial;    /* reset for SVG */
+    }
+
+    /* Keep review badge visible */
+    .nav-badge {
+        font-size: 0.58rem;
+        padding: 0.08rem 0.35rem;
+    }
+
+    /* Shrink brand slightly */
+    .sidebar-dove {
+        height: 22px;
+    }
+
+    .sidebar-wordmark {
+        height: 11px;
+    }
+
+    /* Tighter content padding */
+    .content {
+        padding: 1.25rem 0.875rem 4rem;
+    }
+
+    /* ── Card grid: single column ── */
+    .card-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* ── Stat card: compact ── */
+    .stat-card {
+        padding: 1rem 1.25rem;
+    }
+
+    .stat-value {
+        font-size: 1.4rem;
+    }
+
+    /* ── Card: tighter padding ── */
+    .card {
+        padding: 1rem 1.125rem;
+    }
+
+    /* ── Review card: stack head vertically ── */
+    .review-card {
+        padding: 1rem 1.125rem;
+    }
+
+    .review-head {
+        flex-direction: column;
+        gap: 0.4rem;
+        align-items: flex-start;
+    }
+
+    .review-amount {
+        font-size: 1rem;
+    }
+
+    /* review-fields already collapses at 600px; ensure full width */
+    .review-fields {
+        grid-template-columns: 1fr;
+    }
+
+    /* ── Review actions: full-width button ── */
+    .review-actions {
+        justify-content: stretch;
+    }
+
+    .review-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    /* ── Filter row (Transactions): stack vertically ── */
+    .filter-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .filter-row select,
+    .filter-select {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .filter-row .row-inline {
+        width: 100%;
+    }
+
+    /* ── Transaction table: reduce column widths, keep visible ── */
+    .txn-table-card {
+        padding: 0.25rem 0.75rem;
+    }
+
+    .txn-cat {
+        width: 90px;
+    }
+
+    .txn-amount {
+        width: 80px;
+        font-size: 0.82rem;
+    }
+
+    .txn-desc {
+        /* allow truncation so row stays on one line */
+        max-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .txn-row td {
+        padding: 0.5rem 0.35rem;
+        font-size: 0.82rem;
+    }
+
+    /* ── Day header: tighter ── */
+    .day-header {
+        margin: 1.25rem 0 0.35rem;
+    }
+
+    /* ── Settings: connection-status wraps ── */
+    .connection-status {
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        font-size: 0.82rem;
+    }
+
+    /* ── Table scroll wrapper tighter on mobile ── */
+    .table-scroll {
+        margin: 0 -0.125rem;
+    }
+
+    /* ── Buttons: ensure min tap target ── */
+    .btn {
+        min-height: 38px;
+    }
+
+    /* ── Banner wraps cleanly ── */
+    .banner {
+        flex-wrap: wrap;
+        font-size: 0.82rem;
+    }
+
+    /* ── RadzenChart container: fluid ── */
+    .rz-chart {
+        width: 100% !important;
+        max-width: 100%;
     }
 }
 
