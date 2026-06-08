@@ -5,37 +5,51 @@
 
 <PageTitle>Plutus — Settings</PageTitle>
 
-<h1>Settings</h1>
+<div class="page-header">
+    <div class="page-title">Settings</div>
+</div>
 
 @if (_bannerMessage is not null)
 {
-    <div class="banner @(_bannerOk ? "banner-success" : "banner-error")">@_bannerMessage</div>
+    <div class="banner @(_bannerOk ? "banner-success" : "banner-error")">
+        @if (_bannerOk)
+        {
+            <span>✓</span>
+        }
+        else
+        {
+            <span>✕</span>
+        }
+        @_bannerMessage
+    </div>
 }
 
-<h2>SimpleFIN connection</h2>
-<div class="card">
-    @if (_connection is null)
-    {
-        <p><span class="status-dot none"></span><span class="muted">Not connected.</span></p>
-    }
-    else
-    {
-        <p>
-            <span class="status-dot ok"></span>Connected since @_connection.CreatedAt.ToLocalTime().ToString("g").
+<div class="section-label">SimpleFIN Connection</div>
+<div class="card settings-section">
+    <div class="connection-status">
+        @if (_connection is null)
+        {
+            <span class="status-dot none"></span>
+            <span class="muted">Not connected</span>
+        }
+        else
+        {
+            <span class="status-dot ok"></span>
+            <span>Connected since @_connection.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</span>
             @if (_connection.LastSyncedAt is { } last)
             {
-                <span class="muted"> Last synced @last.ToLocalTime().ToString("g").</span>
+                <span class="muted" style="margin-left:auto">Last synced @last.ToLocalTime().ToString("MMM d · h:mm tt")</span>
             }
             else
             {
-                <span class="muted"> Not yet synced.</span>
+                <span class="muted" style="margin-left:auto">Not yet synced</span>
             }
-        </p>
-    }
+        }
+    </div>
 
-    <div class="field" style="margin-top:.5rem">
-        <label>Setup token (paste from SimpleFIN, single-use)</label>
-        <input type="password" @bind="_setupToken" placeholder="Base64 setup token" />
+    <div class="field">
+        <label>Setup Token</label>
+        <input type="password" @bind="_setupToken" placeholder="Paste your SimpleFIN setup token (Base64, single-use)" />
     </div>
     <div class="row-inline" style="justify-content:flex-end">
         <button class="btn btn-primary" disabled="@(_connecting || string.IsNullOrWhiteSpace(_setupToken))" @onclick="ConnectAsync">
@@ -44,25 +58,43 @@
     </div>
 </div>
 
-<h2>Categories</h2>
-<div class="card">
+<div class="section-label">Categories</div>
+<div class="card settings-section" style="padding:.5rem 1.25rem">
     <table>
+        <thead>
+            <tr>
+                <th style="width:60px">Order</th>
+                <th>Name</th>
+                <th style="width:130px">Color</th>
+                <th style="width:170px"></th>
+            </tr>
+        </thead>
         <tbody>
             @foreach (var category in _categories)
             {
                 <tr class="txn-row">
-                    <td style="width:60px"><input type="number" @bind="category.SortOrder" style="width:60px" /></td>
-                    <td><input type="text" @bind="category.Name" /></td>
-                    <td style="width:120px"><input type="text" @bind="category.Color" placeholder="#hex" /></td>
-                    <td style="width:160px;text-align:right">
-                        <button class="btn btn-sm" @onclick="() => SaveCategoryAsync(category)">Save</button>
-                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteCategoryAsync(category.Id)">Delete</button>
+                    <td><input type="number" @bind="category.SortOrder" style="width:56px" /></td>
+                    <td>
+                        <div class="row-inline" style="gap:.6rem">
+                            @if (!string.IsNullOrWhiteSpace(category.Color))
+                            {
+                                <div class="color-preview" style="background:@category.Color"></div>
+                            }
+                            <input type="text" @bind="category.Name" />
+                        </div>
+                    </td>
+                    <td><input type="text" @bind="category.Color" placeholder="#hex" /></td>
+                    <td style="text-align:right">
+                        <div class="row-inline" style="justify-content:flex-end">
+                            <button class="btn btn-sm" @onclick="() => SaveCategoryAsync(category)">Save</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteCategoryAsync(category.Id)">Delete</button>
+                        </div>
                     </td>
                 </tr>
             }
             <tr class="txn-row">
                 <td></td>
-                <td><input type="text" @bind="_newCategoryName" placeholder="New category" /></td>
+                <td><input type="text" @bind="_newCategoryName" placeholder="New category name" /></td>
                 <td><input type="text" @bind="_newCategoryColor" placeholder="#4F46E5" /></td>
                 <td style="text-align:right">
                     <button class="btn btn-sm btn-primary" disabled="@string.IsNullOrWhiteSpace(_newCategoryName)" @onclick="AddCategoryAsync">Add</button>
@@ -72,25 +104,28 @@
     </table>
 </div>
 
-<h2>Sync</h2>
-<div class="card">
-    <p class="muted">Automatic daily sync at @SyncOptions.Value.DailyTime, plus a catch-up run on startup.</p>
+<div class="section-label">Sync History</div>
+<div class="card settings-section" style="padding:.5rem 1.25rem">
+    <p class="muted" style="padding:.5rem 0; margin:0">Automatic daily sync at <span style="font-family:var(--font-mono); color:var(--text)">@SyncOptions.Value.DailyTime</span> · plus a catch-up run on startup</p>
     @if (_runs.Count == 0)
     {
-        <p class="muted">No sync runs yet.</p>
+        <p class="muted" style="padding:.5rem 0">No sync runs yet.</p>
     }
     else
     {
-        <table>
+        <table class="sync-table">
             <tbody>
                 @foreach (var run in _runs)
                 {
                     var ok = run.Status == SyncStatus.Success;
                     <tr class="txn-row">
-                        <td><span class="status-dot @(ok ? "ok" : "bad")"></span>@run.RanAt.ToLocalTime().ToString("g")</td>
-                        <td>@run.Status</td>
+                        <td style="width:180px">
+                            <span class="status-dot @(ok ? "ok" : "bad")"></span>
+                            @run.RanAt.ToLocalTime().ToString("MMM d · h:mm tt")
+                        </td>
+                        <td style="width:100px; color:@(ok ? "var(--emerald)" : "var(--crimson)"); font-size:.82rem; font-weight:600">@run.Status</td>
                         <td>@run.NewTransactionCount new</td>
-                        <td class="muted">@run.Error</td>
+                        <td class="muted" style="font-size:.8rem">@run.Error</td>
                     </tr>
                 }
             </tbody>
@@ -135,7 +170,7 @@
             await ConnectionService.ConnectAsync(_setupToken.Trim());
             _setupToken = "";
             _bannerOk = true;
-            _bannerMessage = "Connected to SimpleFIN.";
+            _bannerMessage = "Connected to SimpleFIN successfully.";
             await LoadAsync();
         }
         catch (Exception ex)

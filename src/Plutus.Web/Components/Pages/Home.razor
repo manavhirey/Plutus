@@ -3,54 +3,70 @@
 
 <PageTitle>Plutus — Dashboard</PageTitle>
 
-<h1>Dashboard</h1>
-
 @if (_loading)
 {
-    <p class="muted">Loading…</p>
+    <div class="loading-text" style="margin-top:3rem">
+        <div class="loading-spinner"></div>
+        Loading…
+    </div>
 }
 else
 {
+    <div class="page-header">
+        <div class="page-title">Dashboard</div>
+        <div class="page-title-sub">@DateTime.Now.ToString("dddd, MMMM d, yyyy").ToUpper()</div>
+    </div>
+
     <div class="card-grid">
-        <div class="card">
-            <div class="stat-label">Needs review</div>
-            <div class="stat-value">@_needsReview</div>
+        <div class="stat-card">
+            <div class="stat-label">Needs Review</div>
+            <div class="stat-value @(_needsReview > 0 ? "highlight" : "")">@_needsReview</div>
             @if (_needsReview > 0)
             {
-                <a class="muted" href="review">Review now →</a>
+                <a href="review" class="muted" style="font-size:.78rem; text-decoration:none; color:var(--amber);">Review now →</a>
+            }
+            else
+            {
+                <span class="muted">All clear</span>
             }
         </div>
-        <div class="card">
-            <div class="stat-label">Last sync</div>
+
+        <div class="stat-card">
+            <div class="stat-label">Last Sync</div>
             @if (_lastRun is null)
             {
-                <div class="stat-value"><span class="status-dot none"></span>Never</div>
+                <div class="stat-value" style="font-size:1rem; color:var(--text-muted)">Never</div>
                 <span class="muted">Connect SimpleFIN in Settings</span>
             }
             else
             {
                 var ok = _lastRun.Status == SyncStatus.Success;
-                <div class="stat-value">
+                <div class="stat-value" style="font-size:1rem; display:flex; align-items:center; gap:.35rem">
                     <span class="status-dot @(ok ? "ok" : "bad")"></span>@_lastRun.Status
                 </div>
-                <span class="muted">@_lastRun.RanAt.ToLocalTime().ToString("g") · @_lastRun.NewTransactionCount new</span>
+                <span class="muted">@_lastRun.RanAt.ToLocalTime().ToString("MMM d · h:mm tt") · @_lastRun.NewTransactionCount new</span>
             }
         </div>
     </div>
 
-    <h2>Accounts</h2>
+    <div class="section-label" style="margin-top:2rem">Accounts</div>
+
     @if (_accounts.Count == 0)
     {
-        <div class="card muted">No accounts yet. Connect SimpleFIN in Settings to start syncing.</div>
+        <div class="empty-state">
+            <div class="empty-icon">🏦</div>
+            <p style="font-weight:600; color:var(--text); margin-bottom:.35rem">No accounts connected</p>
+            <p><a href="settings" style="color:var(--amber); text-decoration:none">Connect SimpleFIN in Settings</a> to start syncing.</p>
+        </div>
     }
     else
     {
         <div class="card-grid">
             @foreach (var account in _accounts)
             {
-                <div class="card">
+                <div class="stat-card">
                     <div class="stat-label">@account.Name</div>
-                    <div class="stat-value">@Money.Plain(account.Balance)</div>
+                    <div class="stat-value amount" style="font-size:1.4rem">@Money.Plain(account.Balance)</div>
                     <span class="muted">@(account.Org ?? account.Currency)</span>
                 </div>
             }

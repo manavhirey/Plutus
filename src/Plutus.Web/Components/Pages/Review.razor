@@ -5,60 +5,75 @@
 
 <PageTitle>Plutus — Review</PageTitle>
 
-<h1>Daily Review</h1>
+<div class="page-header">
+    <div class="page-title">Daily Review</div>
+    @if (!_loading && _items.Count > 0)
+    {
+        <div class="page-title-sub">@_items.Count TRANSACTION@(_items.Count == 1 ? "" : "S") PENDING</div>
+    }
+</div>
 
 @if (_loading)
 {
-    <p class="muted">Loading…</p>
+    <div class="loading-text">
+        <div class="loading-spinner"></div>
+        Loading…
+    </div>
 }
 else if (_items.Count == 0)
 {
-    <div class="card muted">🎉 Nothing to review — you're all caught up.</div>
+    <div class="empty-state">
+        <div class="empty-icon">✓</div>
+        <p style="font-weight:600; color:var(--text); margin-bottom:.35rem">All caught up</p>
+        <p>No transactions pending review.</p>
+    </div>
 }
 else
 {
-    <p class="muted">@_items.Count transaction@(_items.Count == 1 ? "" : "s") to review.</p>
-
-    @foreach (var item in _items)
-    {
-        <div class="card review-card">
-            <div class="review-head">
-                <div>
-                    <span class="muted">@item.PostedDate.ToLocalTime().ToString("MMM d")</span>
-                    <span class="review-desc">@item.Description</span>
+    <div class="review-stack">
+        @foreach (var item in _items)
+        {
+            <div class="review-card">
+                <div class="review-head">
+                    <div class="review-meta">
+                        <span class="review-date">@item.PostedDate.ToLocalTime().ToString("MMM d, yyyy")</span>
+                        <span class="review-desc">@item.Description</span>
+                    </div>
+                    <span class="review-amount">@Money.Expense(item.Amount)</span>
                 </div>
-                <span class="amount">@Money.Expense(item.Amount)</span>
-            </div>
 
-            <div class="field" style="margin-top:.75rem">
-                <label>
-                    Category
-                    @if (item.HasSuggestion)
-                    {
-                        <span class="muted">— suggested</span>
-                    }
-                </label>
-                <select @bind="item.SelectedCategoryId">
-                    <option value="0">Uncategorized</option>
-                    @foreach (var category in _categories)
-                    {
-                        <option value="@category.Id">@category.Name</option>
-                    }
-                </select>
-            </div>
+                <div class="review-fields">
+                    <div class="field" style="margin-bottom:0">
+                        <label>
+                            Category
+                            @if (item.HasSuggestion)
+                            {
+                                <span class="suggested-badge">AI suggested</span>
+                            }
+                        </label>
+                        <select @bind="item.SelectedCategoryId">
+                            <option value="0">Uncategorized</option>
+                            @foreach (var category in _categories)
+                            {
+                                <option value="@category.Id">@category.Name</option>
+                            }
+                        </select>
+                    </div>
 
-            <div class="field">
-                <label>Note</label>
-                <input type="text" @bind="item.Note" placeholder="e.g. birthday gift for Sam" />
-            </div>
+                    <div class="field" style="margin-bottom:0">
+                        <label>Note</label>
+                        <input type="text" @bind="item.Note" placeholder="e.g. birthday gift for Sam" />
+                    </div>
+                </div>
 
-            <div class="row-inline" style="justify-content:flex-end">
-                <button class="btn btn-primary" disabled="@item.Saving" @onclick="() => SaveAsync(item)">
-                    @(item.Saving ? "Saving…" : "Save & next")
-                </button>
+                <div class="review-actions">
+                    <button class="btn btn-primary" disabled="@item.Saving" @onclick="() => SaveAsync(item)">
+                        @(item.Saving ? "Saving…" : "Confirm →")
+                    </button>
+                </div>
             </div>
-        </div>
-    }
+        }
+    </div>
 }
 
 @code {

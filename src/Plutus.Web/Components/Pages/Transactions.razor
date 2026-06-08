@@ -1,12 +1,12 @@
 @page "/transactions"
 @inject IDbContextFactory<PlutusDbContext> DbFactory
 
-<PageTitle>Plutus — Past Transactions</PageTitle>
+<PageTitle>Plutus — Transactions</PageTitle>
 
-<div class="day-header">
-    <h1>Past Transactions</h1>
+<div class="filter-row">
+    <div class="page-title">Transactions</div>
     <div class="row-inline">
-        <span class="muted">Filter</span>
+        <span class="muted" style="font-size:.78rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em">Filter</span>
         <select @bind="_categoryFilter" @bind:after="LoadAsync" style="width:auto">
             <option value="0">All categories</option>
             @foreach (var category in _categories)
@@ -19,11 +19,18 @@
 
 @if (_loading)
 {
-    <p class="muted">Loading…</p>
+    <div class="loading-text">
+        <div class="loading-spinner"></div>
+        Loading transactions…
+    </div>
 }
 else if (_transactions.Count == 0)
 {
-    <div class="card muted">No transactions to show.</div>
+    <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p style="font-weight:600; color:var(--text); margin-bottom:.35rem">No transactions</p>
+        <p>Nothing to show for the current filter.</p>
+    </div>
 }
 else
 {
@@ -33,26 +40,26 @@ else
     {
         <div class="day-header">
             <span class="day">@day.Key.ToString("dddd, MMM d, yyyy")</span>
-            <span class="total">@Money.Expense(day.Sum(t => t.Amount))</span>
+            <span class="total amount">@Money.Expense(day.Sum(t => t.Amount))</span>
         </div>
-        <div class="card" style="padding:.25rem 1rem">
+        <div class="card" style="padding:.25rem 1rem; margin-bottom:.25rem">
             <table>
                 <tbody>
                     @foreach (var txn in day.OrderByDescending(t => t.PostedDate))
                     {
                         <tr class="txn-row">
-                            <td>@txn.Description</td>
-                            <td style="width:140px">
+                            <td style="color:var(--text)">@txn.Description</td>
+                            <td style="width:150px">
                                 @if (txn.Category is not null)
                                 {
-                                    <span class="chip" style="background:@(txn.Category.Color ?? "#6b7280")">@txn.Category.Name</span>
+                                    <span class="chip" style="background:@(txn.Category.Color ?? "#4a4f65")">@txn.Category.Name</span>
                                 }
                                 else
                                 {
-                                    <span class="muted">Uncategorized</span>
+                                    <span style="color:var(--text-dim); font-size:.8rem">Uncategorized</span>
                                 }
                             </td>
-                            <td class="amount" style="width:110px;text-align:right">@Money.Expense(txn.Amount)</td>
+                            <td class="amount amount-expense" style="width:120px; text-align:right; font-size:.9rem">@Money.Expense(txn.Amount)</td>
                         </tr>
                     }
                 </tbody>

@@ -1,15 +1,41 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
 <div class="app-shell">
-    <header class="topbar">
-        <a class="brand" href="/">Plutus</a>
-        <nav>
-            <NavLink href="" Match="NavLinkMatch.All">Dashboard</NavLink>
-            <NavLink href="review">Review</NavLink>
-            <NavLink href="transactions">Past</NavLink>
-            <NavLink href="settings">Settings</NavLink>
+    <aside class="sidebar">
+        <a class="sidebar-brand" href="/">
+            <span class="sidebar-brand-name">Plutus</span>
+            <span class="sidebar-brand-sub">Finance</span>
+        </a>
+        <nav class="sidebar-nav">
+            <NavLink href="" Match="NavLinkMatch.All">
+                <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 6l6-4 6 4v8a1 1 0 01-1 1H3a1 1 0 01-1-1V6z"/>
+                    <path d="M6 14V9h4v5"/>
+                </svg>
+                Dashboard
+            </NavLink>
+            <NavLink href="review">
+                <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="8" cy="8" r="6"/>
+                    <path d="M8 5v3l2 2"/>
+                </svg>
+                Review
+            </NavLink>
+            <NavLink href="transactions">
+                <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 4h12M2 8h8M2 12h10"/>
+                </svg>
+                Transactions
+            </NavLink>
+            <NavLink href="settings">
+                <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="8" cy="8" r="2"/>
+                    <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42"/>
+                </svg>
+                Settings
+            </NavLink>
         </nav>
-    </header>
+    </aside>
     <main class="content">
         @Body
     </main>
@@ -18,5 +44,5 @@
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    <span class="dismiss">✕</span>
 </div>
