@@ -2,6 +2,7 @@
 @inject IDbContextFactory<PlutusDbContext> DbFactory
 @inject ISpendingReport SpendingReport
 @inject NavigationManager Nav
+@inject ILogger<Home> Logger
 
 <PageTitle>Plutus — Dashboard</PageTitle>
 
@@ -125,12 +126,14 @@ else
 
             try
             {
-                _spend = await SpendingReport.GetMonthlySpendingAsync(DateTime.Now.Year, DateTime.Now.Month);
+                var now = DateTime.Now;
+                _spend = await SpendingReport.GetMonthlySpendingAsync(now.Year, now.Month);
                 _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
                 _chartStyle = $"height:{_spend.Count * 44 + 60}px";
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.LogError(ex, "Failed to load monthly spending for the dashboard chart.");
                 _spend = [];
                 _fills = [];
             }
