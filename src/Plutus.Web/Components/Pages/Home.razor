@@ -1,5 +1,8 @@
 @page "/"
 @inject IDbContextFactory<PlutusDbContext> DbFactory
+@inject ISpendingReport SpendingReport
+@inject NavigationManager Nav
+@inject ILogger<Home> Logger
 
 <PageTitle>Plutus — Dashboard</PageTitle>
 
@@ -49,6 +52,33 @@ else
         </div>
     </div>
 
+    <div class="section-label" style="margin-top:2rem">This Month · Spending by Category</div>
+    <div class="card">
+        @if (_spend.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-icon">📊</div>
+                <p style="font-weight:600; color:var(--text); margin-bottom:.35rem">No spending data yet</p>
+                <p>Categorized transactions will appear here once synced.</p>
+            </div>
+        }
+        else
+        {
+            <RadzenChart SeriesClick="@OnSeriesClick" Style="@_chartStyle">
+                <RadzenBarSeries TItem="CategorySpend"
+                                 Data="@_spend"
+                                 CategoryProperty="Name"
+                                 ValueProperty="Total"
+                                 Fills="@_fills"
+                                 Title="Spending" />
+                <RadzenValueAxis Formatter="@FormatAsCurrency">
+                    <RadzenAxisTitle Text="Amount ($)" />
+                </RadzenValueAxis>
+                <RadzenLegend Visible="false" />
+            </RadzenChart>
+        }
+    </div>
+
     <div class="section-label" style="margin-top:2rem">Accounts</div>
 
     @if (_accounts.Count == 0)
@@ -79,13 +109,57 @@ else
     private List<Account> _accounts = [];
     private int _needsReview;
     private SyncRun? _lastRun;
+    private IReadOnlyList<CategorySpend> _spend = [];
+    private IEnumerable<string> _fills = [];
+    private string _chartStyle = "height:300px";
+
+    private const string GrayFallback = "#808184";
 
     protected override async Task OnInitializedAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        _accounts = await db.Accounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync();
-        _needsReview = await db.Transactions.CountAsync(t => !t.IsReviewed);
-        _lastRun = await db.SyncRuns.AsNoTracking().OrderByDescending(r => r.RanAt).FirstOrDefaultAsync();
-        _loading = false;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _accounts = await db.Accounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync();
+            _needsReview = await db.Transactions.CountAsync(t => !t.IsReviewed);
+            _lastRun = await db.SyncRuns.AsNoTracking().OrderByDescending(r => r.RanAt).FirstOrDefaultAsync();
+
+            try
+            {
+                var now = DateTime.Now;
+                _spend = await SpendingReport.GetMonthlySpendingAsync(now.Year, now.Month);
+                _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
+                _chartStyle = $"height:{_spend.Count * 44 + 60}px";
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to load monthly spending for the dashboard chart.");
+                _spend = [];
+                _fills = [];
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string FormatAsCurrency(object value)
+    {
+        if (value is double d)
+            return $"${d:N0}";
+        return value?.ToString() ?? "";
+    }
+
+    private void OnSeriesClick(SeriesClickEventArgs args)
+    {
+        if (args.Data is not CategorySpend row)
+            return;
+
+        var url = row.CategoryId is null
+            ? "/transactions?category=uncategorized"
+            : $"/transactions?category={row.CategoryId}";
+
+        Nav.NavigateTo(url);
     }
 }

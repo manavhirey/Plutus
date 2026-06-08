@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Plutus.Core.Abstractions;
 using Plutus.Core.Categorization;
 using Plutus.Core.Data;
+using Plutus.Core.Reporting;
 using Plutus.Core.Security;
 using Plutus.Core.SimpleFin;
 using Plutus.Core.Sync;
@@ -53,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<ICategorizer, ClaudeCategorizer>();
         services.AddScoped<ISimpleFinConnectionService, SimpleFinConnectionService>();
         services.AddScoped<ISyncService, SyncService>();
+        services.AddScoped<ISpendingReport, SpendingReport>();
 
         return services;
     }

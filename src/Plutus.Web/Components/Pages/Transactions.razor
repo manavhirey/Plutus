@@ -1,5 +1,6 @@
 @page "/transactions"
 @inject IDbContextFactory<PlutusDbContext> DbFactory
+@using System.Globalization
 
 <PageTitle>Plutus — Transactions</PageTitle>
 
@@ -9,6 +10,7 @@
         <span class="muted" style="font-size:.78rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em">Filter</span>
         <select @bind="_categoryFilter" @bind:after="LoadAsync" style="width:auto">
             <option value="0">All categories</option>
+            <option value="-1">Uncategorized</option>
             @foreach (var category in _categories)
             {
                 <option value="@category.Id">@category.Name</option>
@@ -69,16 +71,33 @@ else
 }
 
 @code {
+    // Query-string parameter: numeric id, "uncategorized", or absent/"0"
+    [SupplyParameterFromQuery(Name = "category")]
+    public string? CategoryParam { get; set; }
+
     private bool _loading = true;
+    // Sentinel: 0 = all, -1 = uncategorized, >0 = specific category id
     private int _categoryFilter; // 0 = all
     private List<Category> _categories = [];
     private List<Transaction> _transactions = [];
 
     protected override async Task OnInitializedAsync()
     {
+        _categoryFilter = ParseCategoryParam(CategoryParam);
+
         await using var db = await DbFactory.CreateDbContextAsync();
         _categories = await db.Categories.AsNoTracking().OrderBy(c => c.SortOrder).ToListAsync();
         await LoadAsync();
+    }
+
+    // Maps a raw query-string value to the sentinel int.
+    // "uncategorized" → -1, positive numeric id → that id, anything else → 0 (all)
+    private static int ParseCategoryParam(string? param)
+    {
+        if (string.IsNullOrWhiteSpace(param)) return 0;
+        if (param.Equals("uncategorized", StringComparison.OrdinalIgnoreCase)) return -1;
+        if (int.TryParse(param, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && id > 0) return id;
+        return 0;
     }
 
     private async Task LoadAsync()
@@ -86,10 +105,15 @@ else
         _loading = true;
         await using var db = await DbFactory.CreateDbContextAsync();
         var query = db.Transactions.AsNoTracking().Include(t => t.Category).AsQueryable();
-        if (_categoryFilter != 0)
+        if (_categoryFilter == -1)
+        {
+            query = query.Where(t => t.CategoryId == null);
+        }
+        else if (_categoryFilter > 0)
         {
             query = query.Where(t => t.CategoryId == _categoryFilter);
         }
+        // _categoryFilter == 0 → no filter (all transactions)
 
         _transactions = await query
             .OrderByDescending(t => t.PostedDate)
