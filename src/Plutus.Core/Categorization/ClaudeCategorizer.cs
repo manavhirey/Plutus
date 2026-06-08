@@ -86,7 +86,7 @@ public sealed class ClaudeCategorizer(
                 return null;
             }
 
-            var modelNote = string.IsNullOrWhiteSpace(parsed.Note) ? null : parsed.Note.Trim();
+            var modelNote = NormalizeNote(parsed.Note);
             return new CategorizationResult(match.Name, modelNote, parsed.Confidence);
         }
         catch (Exception ex)
@@ -107,6 +107,9 @@ public sealed class ClaudeCategorizer(
 
         return content;
     }
+
+    internal static string? NormalizeNote(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     internal static JsonOutputFormat BuildSchema(IReadOnlyList<Category> categories)
     {
