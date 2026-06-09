@@ -1,0 +1,150 @@
+@inject IDbContextFactory<PlutusDbContext> DbFactory
+@inject TimeProvider Time
+@inject ILogger<TransactionEditPanel> Logger
+@using Plutus.Core.Transactions
+
+@if (_loaded && TransactionId is not null)
+{
+    <div class="panel-backdrop" @onclick="CloseAsync"></div>
+    <div class="slideover" tabindex="0" @ref="_panelRef" @onkeydown="HandleKeyDownAsync">
+        <div class="slideover-head">
+            <div class="slideover-title">Edit transaction</div>
+            <button class="slideover-close" @onclick="CloseAsync" aria-label="Close">✕</button>
+        </div>
+
+        <div class="slideover-meta">
+            <span class="review-date">@_postedDate.ToLocalTime().ToString("MMM d, yyyy")</span>
+            <span class="review-desc">@_description</span>
+            <span class="review-amount">@Money.Expense(_amount)</span>
+        </div>
+
+        <div class="field">
+            <label>Category</label>
+            <select @bind="_selectedCategoryId">
+                <option value="0">Uncategorized</option>
+                @foreach (var category in Categories)
+                {
+                    <option value="@category.Id">@category.Name</option>
+                }
+            </select>
+        </div>
+
+        <div class="field">
+            <label>Note</label>
+            <input type="text" @bind="_note" placeholder="e.g. birthday gift for Sam" />
+        </div>
+
+        <div class="slideover-actions">
+            <button class="btn" @onclick="CloseAsync" disabled="@_saving">Cancel</button>
+            <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int? TransactionId { get; set; }
+    [Parameter] public IReadOnlyList<Category> Categories { get; set; } = [];
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnClosed { get; set; }
+
+    private int? _loadedId;
+    private bool _loaded;
+    private bool _saving;
+    private bool _focusPending;
+
+    private string _description = "";
+    private decimal _amount;
+    private DateTime _postedDate;
+    private int _selectedCategoryId; // 0 = Uncategorized
+    private string? _note;
+
+    private ElementReference _panelRef;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (TransactionId == _loadedId)
+        {
+            return; // no change
+        }
+
+        _loadedId = TransactionId;
+        _loaded = false;
+
+        if (TransactionId is null)
+        {
+            return; // closed
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var txn = await db.Transactions.AsNoTracking().FirstOrDefaultAsync(t => t.Id == TransactionId.Value);
+        if (txn is null)
+        {
+            await OnClosed.InvokeAsync(); // vanished — treat as closed
+            return;
+        }
+
+        _description = txn.Description;
+        _amount = txn.Amount;
+        _postedDate = txn.PostedDate;
+        _selectedCategoryId = txn.CategoryId ?? 0;
+        _note = txn.Note;
+        _loaded = true;
+        _focusPending = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusPending && _loaded)
+        {
+            _focusPending = false;
+            try { await _panelRef.FocusAsync(); } catch { /* element may already be gone */ }
+        }
+    }
+
+    private async Task HandleKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            await CloseAsync();
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+        await OnClosed.InvokeAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (TransactionId is null || _saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            int? categoryId = _selectedCategoryId == 0 ? null : _selectedCategoryId;
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var txn = await db.Transactions.FirstOrDefaultAsync(t => t.Id == TransactionId.Value);
+            if (txn is not null)
+            {
+                TransactionEditor.ApplyEdit(txn, categoryId, _note, Time.GetUtcNow());
+                await db.SaveChangesAsync();
+            }
+            await OnSaved.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to save transaction edit for {Id}.", TransactionId);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
