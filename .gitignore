@@ -30,3 +30,6 @@ secrets.json
 # Brainstorming companion + local session scratch
 .superpowers/
 .remember/
+
+# Claude Code transient cron lock
+.claude/scheduled_tasks.lock
