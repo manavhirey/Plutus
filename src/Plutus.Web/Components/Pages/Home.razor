@@ -211,6 +211,7 @@ else
             Logger.LogError(ex, "Failed to load monthly spending for the dashboard chart.");
             _spend = [];
             _fills = [];
+            _topCategory = null; // keep the Top Category card consistent with the emptied chart
         }
 
         try
