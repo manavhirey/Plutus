@@ -24,4 +24,10 @@ public sealed class SyncOptions
     /// case-insensitive substring of the payment description (e.g. "BILT" → "BILT CARD PMT ...").
     /// </summary>
     public string[] ExternalCardPayees { get; set; } = ["BILT"];
+
+    /// <summary>
+    /// An account is shown as "stale" on the dashboard when its SimpleFIN balance-date is
+    /// older than this many hours. Defaults to 24h, matching the daily sync cadence.
+    /// </summary>
+    public int StaleAfterHours { get; set; } = 24;
 }
