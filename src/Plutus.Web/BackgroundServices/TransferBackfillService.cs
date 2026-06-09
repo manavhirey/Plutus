@@ -1,18 +1,21 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Plutus.Core.Data;
+using Plutus.Core.Sync;
 using Plutus.Core.Transfers;
 
 namespace Plutus.Web.BackgroundServices;
 
 /// <summary>
 /// One-off pass that re-runs transfer detection over every existing transaction and moves
-/// payments to synced accounts into the <c>Transfer</c> category (excluded from spending).
-/// Enabled only when <c>Plutus:Backfill:Transfers</c> is true; otherwise a no-op so it's inert
-/// in production by default. Run once after deploy, then unset.
+/// payments to synced accounts (and named unsynced cards) into the <c>Transfer</c> category
+/// (excluded from spending). Enabled only when <c>Plutus:Backfill:Transfers</c> is true; otherwise
+/// a no-op so it's inert in production by default. Run once after deploy, then unset.
 /// </summary>
 public sealed class TransferBackfillService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
+    IOptions<SyncOptions> syncOptions,
     TimeProvider timeProvider,
     ILogger<TransferBackfillService> logger) : BackgroundService
 {
@@ -40,6 +43,8 @@ public sealed class TransferBackfillService(
             .Select(a => new SyncedAccountRef(a.Id, a.Name, a.Org))
             .ToListAsync(stoppingToken);
 
+        var externalCardPayees = syncOptions.Value.ExternalCardPayees;
+
         var transactions = await db.Transactions.ToListAsync(stoppingToken);
         logger.LogInformation("Transfer backfill starting: {Count} transactions.", transactions.Count);
 
@@ -56,7 +61,7 @@ public sealed class TransferBackfillService(
                 continue; // already a transfer
             }
 
-            if (TransferDetector.IsTransferPayment(t.Description, t.AccountId, accounts))
+            if (TransferDetector.IsTransferPayment(t.Description, t.AccountId, accounts, externalCardPayees))
             {
                 t.CategoryId = transfer.Id;
                 t.IsCategorized = true;

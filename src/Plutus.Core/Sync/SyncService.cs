@@ -57,7 +57,8 @@ public sealed class SyncService(
                 .Select(a => new SyncedAccountRef(a.Id, a.Name, a.Org))
                 .ToListAsync(ct);
 
-            await CategorizeAsync(db, newTransactions, categories, accountRefs, now.UtcDateTime, ct);
+            await CategorizeAsync(
+                db, newTransactions, categories, accountRefs, opts.ExternalCardPayees, now.UtcDateTime, ct);
 
             run.Status = SyncStatus.Success;
             run.NewTransactionCount = newTransactions.Count;
@@ -175,6 +176,7 @@ public sealed class SyncService(
         List<Transaction> transactions,
         IReadOnlyList<Category> categories,
         IReadOnlyList<SyncedAccountRef> accounts,
+        IReadOnlyList<string> externalCardPayees,
         DateTime categorizedAt,
         CancellationToken ct)
     {
@@ -189,7 +191,8 @@ public sealed class SyncService(
         foreach (var transaction in transactions)
         {
             if (transferCategory is not null &&
-                TransferDetector.IsTransferPayment(transaction.Description, transaction.AccountId, accounts))
+                TransferDetector.IsTransferPayment(
+                    transaction.Description, transaction.AccountId, accounts, externalCardPayees))
             {
                 transaction.CategoryId = transferCategory.Id;
                 transaction.IsCategorized = true;

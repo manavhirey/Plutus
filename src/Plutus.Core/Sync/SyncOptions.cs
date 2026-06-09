@@ -16,4 +16,12 @@ public sealed class SyncOptions
 
     /// <summary>Local time of day for the daily scheduled run, "HH:mm".</summary>
     public string DailyTime { get; set; } = "06:00";
+
+    /// <summary>
+    /// Names of unsynced credit cards whose bill payments should be treated as transfers
+    /// (excluded from spending), even though Plutus doesn't sync the card itself. The synced-card
+    /// transfer rule can't catch these because there's no matching account. Matched as a
+    /// case-insensitive substring of the payment description (e.g. "BILT" → "BILT CARD PMT ...").
+    /// </summary>
+    public string[] ExternalCardPayees { get; set; } = ["BILT"];
 }

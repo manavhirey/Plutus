@@ -16,6 +16,9 @@ public sealed class TransferDetectorTests
 
     private const int Source = 1;
 
+    // Unsynced cards the user pays off but Plutus doesn't sync; their payments are transfers.
+    private static readonly IReadOnlyList<string> ExternalPayees = ["BILT"];
+
     [Theory]
     [InlineData("Payment to Chase card ending in 7463 06/04")] // last-4 match -> Freedom
     [InlineData("Payment to Chase card ending in 7795 06/04")] // last-4 match -> Sapphire
@@ -23,28 +26,41 @@ public sealed class TransferDetectorTests
     [InlineData("CAPITAL ONE MOBILE PMT CA084881AF448DE WEB ID: XXXXXX4380")] // issuer org match
     public void Flags_payments_to_synced_cards(string description)
     {
-        Assert.True(TransferDetector.IsTransferPayment(description, Source, Accounts));
+        Assert.True(TransferDetector.IsTransferPayment(description, Source, Accounts, ExternalPayees));
     }
 
     [Theory]
-    [InlineData("BILT CARD PMT PPD ID: 1844372402")] // BILT not synced -> keep
+    [InlineData("BILT CARD PMT PPD ID: 1844372402")] // unsynced card payee + payment marker -> transfer
+    public void Flags_payments_to_external_card_payees(string description)
+    {
+        Assert.True(TransferDetector.IsTransferPayment(description, Source, Accounts, ExternalPayees));
+    }
+
+    [Theory]
     [InlineData("Online Payment 29066523695 To Fensdale Property Trust 05/22")] // rent -> keep
     [InlineData("TRADER JOE'S #123 GROCERIES")] // normal purchase, no payment marker
+    [InlineData("BILT REWARDS DINING PURCHASE")] // BILT payee but no payment marker -> keep
     public void Does_not_flag_non_card_payments(string description)
     {
-        Assert.False(TransferDetector.IsTransferPayment(description, Source, Accounts));
+        Assert.False(TransferDetector.IsTransferPayment(description, Source, Accounts, ExternalPayees));
+    }
+
+    [Fact]
+    public void External_payee_not_flagged_when_list_is_empty()
+    {
+        Assert.False(TransferDetector.IsTransferPayment("BILT CARD PMT PPD ID: 1844372402", Source, Accounts, []));
     }
 
     [Fact]
     public void Does_not_match_the_source_account()
     {
         // Description references the source account's own last-4; must not self-match.
-        Assert.False(TransferDetector.IsTransferPayment("AUTOPAY 0670", Source, Accounts));
+        Assert.False(TransferDetector.IsTransferPayment("AUTOPAY 0670", Source, Accounts, ExternalPayees));
     }
 
     [Fact]
     public void Empty_description_is_not_a_transfer()
     {
-        Assert.False(TransferDetector.IsTransferPayment("", Source, Accounts));
+        Assert.False(TransferDetector.IsTransferPayment("", Source, Accounts, ExternalPayees));
     }
 }
