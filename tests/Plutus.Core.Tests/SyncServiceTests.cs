@@ -235,5 +235,87 @@ public sealed class SyncServiceTests : IDisposable
         Assert.Equal(0, categorizer.Calls); // detection short-circuits the Claude call
     }
 
+    [Fact]
+    public async Task RunAsync_relinks_account_when_simplefin_id_changes_after_reauth()
+    {
+        // Existing account with the OLD SimpleFIN id and one transaction.
+        await using (var seed = NewContext())
+        {
+            seed.SimpleFinConnections.Add(new SimpleFinConnection
+            {
+                AccessUrl = "https://user:pass@bridge.simplefin.org/simplefin",
+                CreatedAt = _time.GetUtcNow().UtcDateTime,
+            });
+            var account = new Account { SimpleFinAccountId = "ACT-old", Name = "Savor (7496)", Currency = "USD" };
+            seed.Accounts.Add(account);
+            seed.Transactions.Add(new Transaction
+            {
+                SimpleFinTransactionId = "old-txn", Account = account, Description = "Old", Amount = 9m,
+                PostedDate = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc),
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        // Bridge now reports the SAME account under a NEW id, with a genuinely new transaction.
+        var set = new SimpleFinAccountSet(
+        [
+            new SimpleFinAccount("ACT-new", "Savor (7496)", "USD", "-50.00", 1_700_000_000,
+                new SimpleFinOrg("Capital One", null),
+            [
+                new SimpleFinTransaction("brand-new", 1_700_000_500, "-12.00", "Lunch"),
+            ]),
+        ], null);
+
+        var run = await NewSync(new FakeSimpleFinClient(set), new FakeCategorizer("Dining")).RunAsync();
+        Assert.NotNull(run);
+        Assert.Equal(SyncStatus.Success, run!.Status);
+
+        await using var verify = NewContext();
+        var accounts = await verify.Accounts.AsNoTracking().ToListAsync();
+        Assert.Single(accounts);                                   // re-linked, NOT duplicated
+        Assert.Equal("ACT-new", accounts[0].SimpleFinAccountId);   // adopted the new id
+        var txns = await verify.Transactions.AsNoTracking().Where(t => t.AccountId == accounts[0].Id).ToListAsync();
+        Assert.Equal(2, txns.Count);                               // old + brand-new both on the one account
+    }
+
+    [Fact]
+    public async Task RunAsync_does_not_reimport_same_transaction_with_new_id()
+    {
+        var posted = new DateTime(2026, 6, 6, 12, 0, 0, DateTimeKind.Utc);
+        long postedUnix = new DateTimeOffset(posted, TimeSpan.Zero).ToUnixTimeSeconds();
+
+        await using (var seed = NewContext())
+        {
+            seed.SimpleFinConnections.Add(new SimpleFinConnection
+            {
+                AccessUrl = "https://user:pass@bridge.simplefin.org/simplefin",
+                CreatedAt = _time.GetUtcNow().UtcDateTime,
+            });
+            var account = new Account { SimpleFinAccountId = "ACT-1", Name = "Savor (7496)", Currency = "USD" };
+            seed.Accounts.Add(account);
+            seed.Transactions.Add(new Transaction
+            {
+                SimpleFinTransactionId = "mbta-old", Account = account, Description = "MBTA", Amount = 2.40m, PostedDate = posted,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        // Same account id, but the MBTA charge comes back with a NEW transaction id (re-auth).
+        var set = new SimpleFinAccountSet(
+        [
+            new SimpleFinAccount("ACT-1", "Savor (7496)", "USD", "-2.40", 1_700_000_000, new SimpleFinOrg("Capital One", null),
+            [
+                new SimpleFinTransaction("mbta-new", postedUnix, "-2.40", "MBTA"),
+            ]),
+        ], null);
+
+        var run = await NewSync(new FakeSimpleFinClient(set), new FakeCategorizer("Transport")).RunAsync();
+        Assert.NotNull(run);
+        Assert.Equal(0, run!.NewTransactionCount); // content-duplicate suppressed
+
+        await using var verify = NewContext();
+        Assert.Single(await verify.Transactions.AsNoTracking().ToListAsync()); // still just the one
+    }
+
     public void Dispose() => _connection.Dispose();
 }

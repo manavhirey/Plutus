@@ -77,50 +77,31 @@ public sealed class SyncService(
         return run;
     }
 
-    /// <summary>Upserts accounts and inserts new expense transactions (credits dropped, deduped).</summary>
+    /// <summary>
+    /// Upserts accounts and inserts new expense transactions (credits dropped, deduped). Accounts are
+    /// matched by SimpleFIN id, then by name (re-linking an account whose id was re-minted on re-auth).
+    /// Transactions are deduped by SimpleFIN id and then by content (a re-auth re-import keeps the same
+    /// posted time/amount/description but gets a new id).
+    /// </summary>
     private async Task<List<Transaction>> IngestAsync(PlutusDbContext db, SimpleFinAccountSet set, CancellationToken ct)
     {
-        // Map incoming accounts to tracked entities (existing or new).
-        var incomingAccountIds = set.Accounts.Select(a => a.Id).ToList();
-        var existingAccounts = await db.Accounts
-            .Where(a => incomingAccountIds.Contains(a.SimpleFinAccountId))
-            .ToDictionaryAsync(a => a.SimpleFinAccountId, ct);
+        // Load all accounts so we can re-link by name when SimpleFIN re-mints an id on re-auth.
+        var allAccounts = await db.Accounts.ToListAsync(ct);
 
-        // Gather candidate expense transactions and dedupe against what's already stored. A
-        // single malformed amount string from the bridge is skipped (with a warning) rather
-        // than thrown — one bad record must not fail the whole sync.
-        var candidates = new List<(SimpleFinAccount Account, SimpleFinTransaction Txn, decimal Amount)>();
-        foreach (var account in set.Accounts)
-        {
-            foreach (var txn in account.Transactions ?? [])
-            {
-                if (!TryParseAmount(txn.Amount, out var amount))
-                {
-                    logger.LogWarning(
-                        "Skipping transaction {Id}: unparseable amount '{Amount}'.", txn.Id, txn.Amount);
-                    continue;
-                }
-
-                if (amount < 0m) // negative = money out = expense
-                {
-                    candidates.Add((account, txn, amount));
-                }
-            }
-        }
-
-        var candidateIds = candidates.Select(x => x.Txn.Id).ToList();
-        var existingTxnIds = await db.Transactions
-            .Where(t => candidateIds.Contains(t.SimpleFinTransactionId))
-            .Select(t => t.SimpleFinTransactionId)
-            .ToHashSetAsync(ct);
-
+        // Resolve each incoming account to a tracked entity (existing, re-linked, or new).
+        var resolved = new Dictionary<string, Account>(StringComparer.Ordinal); // incoming sf id -> entity
         foreach (var sfAccount in set.Accounts)
         {
-            if (!existingAccounts.TryGetValue(sfAccount.Id, out var account))
+            var account = AccountMatcher.FindExisting(sfAccount.Id, sfAccount.Name, allAccounts);
+            if (account is null)
             {
                 account = new Account { SimpleFinAccountId = sfAccount.Id, Name = sfAccount.Name, Currency = sfAccount.Currency };
                 db.Accounts.Add(account);
-                existingAccounts[sfAccount.Id] = account;
+                allAccounts.Add(account);
+            }
+            else
+            {
+                account.SimpleFinAccountId = sfAccount.Id; // re-link: adopt the (possibly new) id
             }
 
             account.Name = sfAccount.Name;
@@ -138,28 +119,82 @@ public sealed class SyncService(
             }
 
             account.BalanceDate = DateTimeOffset.FromUnixTimeSeconds(sfAccount.BalanceDate).UtcDateTime;
+            resolved[sfAccount.Id] = account;
         }
 
-        var newTransactions = new List<Transaction>();
-        foreach (var (sfAccount, sfTxn, amount) in candidates)
+        // Gather candidate expense transactions (negative = money out). A single malformed amount is
+        // skipped (with a warning) rather than thrown. Dedupe within the payload by id defensively.
+        var candidates = new List<(SimpleFinAccount Account, SimpleFinTransaction Txn, decimal Amount)>();
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var account in set.Accounts)
         {
-            if (!existingTxnIds.Add(sfTxn.Id))
+            foreach (var txn in account.Transactions ?? [])
             {
-                continue; // duplicate within this payload or already stored
+                if (!TryParseAmount(txn.Amount, out var amount))
+                {
+                    logger.LogWarning("Skipping transaction {Id}: unparseable amount '{Amount}'.", txn.Id, txn.Amount);
+                    continue;
+                }
+
+                if (amount < 0m && seenIds.Add(txn.Id))
+                {
+                    candidates.Add((account, txn, amount));
+                }
+            }
+        }
+
+        // Fast-path dedupe set: SimpleFIN ids already stored.
+        var candidateIds = candidates.Select(x => x.Txn.Id).ToList();
+        var existingTxnIds = await db.Transactions
+            .Where(t => candidateIds.Contains(t.SimpleFinTransactionId))
+            .Select(t => t.SimpleFinTransactionId)
+            .ToHashSetAsync(ct);
+
+        var newTransactions = new List<Transaction>();
+
+        // Process per resolved account so the content de-dupe compares against the right history.
+        foreach (var group in candidates.GroupBy(c => resolved[c.Account.Id]))
+        {
+            var account = group.Key;
+
+            // Existing content-key counts for this account (only if it is already persisted).
+            var existingKeyCounts = new Dictionary<TransactionDeduper.ContentKey, int>();
+            if (account.Id != 0)
+            {
+                var existing = await db.Transactions
+                    .Where(t => t.AccountId == account.Id)
+                    .Select(t => new { t.PostedDate, t.Amount, t.Description })
+                    .ToListAsync(ct);
+                foreach (var e in existing)
+                {
+                    var key = new TransactionDeduper.ContentKey(e.PostedDate, e.Amount, e.Description);
+                    existingKeyCounts[key] = existingKeyCounts.GetValueOrDefault(key) + 1;
+                }
             }
 
-            var transaction = new Transaction
+            var toInsert = TransactionDeduper.SelectToInsert(
+                group.ToList(),
+                c => c.Txn.Id,
+                c => new TransactionDeduper.ContentKey(
+                    DateTimeOffset.FromUnixTimeSeconds(c.Txn.Posted).UtcDateTime, Math.Abs(c.Amount), c.Txn.Description),
+                existingTxnIds,
+                existingKeyCounts);
+
+            foreach (var (_, sfTxn, amount) in toInsert)
             {
-                SimpleFinTransactionId = sfTxn.Id,
-                Account = existingAccounts[sfAccount.Id],
-                PostedDate = DateTimeOffset.FromUnixTimeSeconds(sfTxn.Posted).UtcDateTime,
-                Amount = Math.Abs(amount),
-                Description = sfTxn.Description,
-                IsCategorized = false,
-                IsReviewed = false,
-            };
-            db.Transactions.Add(transaction);
-            newTransactions.Add(transaction);
+                var transaction = new Transaction
+                {
+                    SimpleFinTransactionId = sfTxn.Id,
+                    Account = account,
+                    PostedDate = DateTimeOffset.FromUnixTimeSeconds(sfTxn.Posted).UtcDateTime,
+                    Amount = Math.Abs(amount),
+                    Description = sfTxn.Description,
+                    IsCategorized = false,
+                    IsReviewed = false,
+                };
+                db.Transactions.Add(transaction);
+                newTransactions.Add(transaction);
+            }
         }
 
         await db.SaveChangesAsync(ct); // assigns ids before categorization
