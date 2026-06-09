@@ -5,6 +5,9 @@
 @using Plutus.Core.Reporting
 @inject NavigationManager Nav
 @inject ILogger<Home> Logger
+@inject ISyncService SyncService
+@inject TimeProvider Time
+@inject Microsoft.Extensions.Options.IOptions<Plutus.Core.Sync.SyncOptions> SyncOpts
 
 <PageTitle>Plutus — Dashboard</PageTitle>
 
@@ -37,7 +40,23 @@ else
         </div>
 
         <div class="stat-card">
-            <div class="stat-label">Last Sync</div>
+            <div class="stat-label" style="display:flex; justify-content:space-between; align-items:center">
+                <span>Last Sync</span>
+                @if (_hasConnection)
+                {
+                    <button class="sync-now-btn" disabled="@_syncing" @onclick="SyncNowAsync"
+                            title="Sync now" aria-label="Sync now">
+                        @if (_syncing)
+                        {
+                            <span class="btn-spinner"></span>
+                        }
+                        else
+                        {
+                            <span>↻</span>
+                        }
+                    </button>
+                }
+            </div>
             @if (_lastRun is null)
             {
                 <div class="stat-value" style="font-size:1rem; color:var(--gray)">Never</div>
@@ -127,6 +146,12 @@ else
                     <div class="stat-label">@account.Name</div>
                     <div class="stat-value amount" style="font-size:1.4rem">@Money.Plain(account.Balance)</div>
                     <span class="muted">@(account.Org ?? account.Currency)</span>
+                    @{
+                        var stale = AccountFreshness.IsStale(account.BalanceDate, _now, _staleThreshold);
+                    }
+                    <span class="acct-updated @(stale ? "stale" : "")">
+                        @(stale ? "⚠️ " : "")Updated @AccountFreshness.Describe(account.BalanceDate, _now)
+                    </span>
                 </div>
             }
         </div>
@@ -143,6 +168,10 @@ else
     private string _chartStyle = "height:300px";
     private NetWorth? _netWorth;
     private TopCategory? _topCategory;
+    private bool _syncing;
+    private bool _hasConnection;
+    private DateTimeOffset _now;
+    private TimeSpan _staleThreshold;
 
     private const string GrayFallback = "#808184";
 
@@ -150,39 +179,72 @@ else
     {
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            _accounts = await db.Accounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync();
-            _needsReview = await db.Transactions.CountAsync(t => !t.IsReviewed);
-            _lastRun = await db.SyncRuns.AsNoTracking().OrderByDescending(r => r.RanAt).FirstOrDefaultAsync();
-
-            try
-            {
-                var now = DateTime.Now;
-                _spend = await SpendingReport.GetMonthlySpendingAsync(now.Year, now.Month);
-                _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
-                _chartStyle = $"height:{_spend.Count * 44 + 60}px";
-                _topCategory = SpendingInsights.Top(_spend);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to load monthly spending for the dashboard chart.");
-                _spend = [];
-                _fills = [];
-            }
-
-            try
-            {
-                _netWorth = await NetWorthReport.GetAsync();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to load net worth for the dashboard.");
-                _netWorth = null;
-            }
+            await LoadDataAsync();
         }
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _now = Time.GetUtcNow();
+        _staleThreshold = TimeSpan.FromHours(SyncOpts.Value.StaleAfterHours);
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _accounts = await db.Accounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync();
+        _needsReview = await db.Transactions.CountAsync(t => !t.IsReviewed);
+        _lastRun = await db.SyncRuns.AsNoTracking().OrderByDescending(r => r.RanAt).FirstOrDefaultAsync();
+        _hasConnection = await db.SimpleFinConnections.AnyAsync();
+
+        try
+        {
+            var now = DateTime.Now;
+            _spend = await SpendingReport.GetMonthlySpendingAsync(now.Year, now.Month);
+            _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
+            _chartStyle = $"height:{_spend.Count * 44 + 60}px";
+            _topCategory = SpendingInsights.Top(_spend);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load monthly spending for the dashboard chart.");
+            _spend = [];
+            _fills = [];
+        }
+
+        try
+        {
+            _netWorth = await NetWorthReport.GetAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load net worth for the dashboard.");
+            _netWorth = null;
+        }
+    }
+
+    private async Task SyncNowAsync()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _syncing = true;
+        try
+        {
+            await SyncService.RunAsync();
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            // RunAsync already records failures as a SyncRun; this just keeps the UI usable.
+            Logger.LogError(ex, "Manual sync failed.");
+        }
+        finally
+        {
+            _syncing = false;
         }
     }
 
