@@ -39,6 +39,7 @@ builder.Services.AddHostedService<DailySyncScheduler>();
 builder.Services.AddHostedService<NoteBackfillService>();
 builder.Services.AddHostedService<TransferBackfillService>();
 builder.Services.AddHostedService<SyncDiagnosticService>();
+builder.Services.AddHostedService<AccountMergeBackfill>();
 
 var app = builder.Build();
 

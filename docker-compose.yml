@@ -34,6 +34,8 @@ services:
       - Plutus__Backfill__Transfers=${PLUTUS_BACKFILL_TRANSFERS:-false}
       # One-off sync diagnostic: set PLUTUS_DIAG_SYNC=true in .env to log what SimpleFIN returns, then unset.
       - Plutus__Diag__Sync=${PLUTUS_DIAG_SYNC:-false}
+      # One-off account-merge backfill: set PLUTUS_BACKFILL_MERGE_ACCOUNTS=true in .env to run once, then unset.
+      - Plutus__Backfill__MergeAccounts=${PLUTUS_BACKFILL_MERGE_ACCOUNTS:-false}
       # Optional overrides:
       # - Plutus__Sync__DailyTime=06:00
       # - Plutus__Claude__Model=claude-haiku-4-5
