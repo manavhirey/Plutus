@@ -38,6 +38,9 @@
     --crimson:      #dc2626;
     --crimson-soft: rgba(220, 38, 38, 0.09);
 
+    --warn:         #B45309;                     /* amber-700, readable on paper */
+    --warn-soft:    rgba(180, 83, 9, 0.10);
+
     --accent-soft:  rgba(61, 114, 255, 0.10);
 
     /* Radii */
@@ -1196,4 +1199,58 @@ h1:focus { outline: none; }
 }
 ::-webkit-scrollbar-thumb:hover {
     background: var(--gray);
+}
+
+/* ── Account freshness + Sync now ─────────────────────────── */
+.acct-updated {
+    display: block;
+    margin-top: .35rem;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    color: var(--gray);
+}
+
+.acct-updated.stale {
+    color: var(--warn);
+}
+
+.sync-now-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--white);
+    color: var(--accent);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.sync-now-btn:hover:not(:disabled) {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+}
+
+.sync-now-btn:disabled {
+    opacity: .55;
+    cursor: default;
+}
+
+.btn-spinner {
+    width: 13px;
+    height: 13px;
+    border: 2px solid var(--accent-soft);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: btn-spin .7s linear infinite;
+}
+
+@keyframes btn-spin {
+    to { transform: rotate(360deg); }
 }
