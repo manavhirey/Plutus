@@ -49,7 +49,7 @@ else
                 <tbody>
                     @foreach (var txn in day.OrderByDescending(t => t.PostedDate))
                     {
-                        <tr class="txn-row">
+                        <tr class="txn-row txn-row-clickable" @onclick="() => _editingId = txn.Id">
                             <td class="txn-desc" style="color:var(--text)">@txn.Description</td>
                             <td class="txn-cat">
                                 @if (txn.Category is not null)
@@ -70,6 +70,11 @@ else
     }
 }
 
+<TransactionEditPanel TransactionId="_editingId"
+                      Categories="_categories"
+                      OnSaved="OnEditSavedAsync"
+                      OnClosed="() => _editingId = null" />
+
 @code {
     // Query-string parameter: numeric id, "uncategorized", or absent/"0"
     [SupplyParameterFromQuery(Name = "category")]
@@ -80,6 +85,7 @@ else
     private int _categoryFilter; // 0 = all
     private List<Category> _categories = [];
     private List<Transaction> _transactions = [];
+    private int? _editingId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -120,5 +126,11 @@ else
             .Take(500)
             .ToListAsync();
         _loading = false;
+    }
+
+    private async Task OnEditSavedAsync()
+    {
+        _editingId = null;
+        await LoadAsync(); // re-applies the current filter; a row moved out of it drops
     }
 }
