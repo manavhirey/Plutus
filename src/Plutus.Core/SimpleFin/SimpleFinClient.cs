@@ -44,11 +44,17 @@ public sealed class SimpleFinClient(HttpClient http, ILogger<SimpleFinClient> lo
         string accessUrl,
         DateTimeOffset start,
         DateTimeOffset end,
+        bool includePending = false,
         CancellationToken ct = default)
     {
         var (baseUri, authHeader) = SplitAccessUrl(accessUrl);
 
-        var requestUri = $"{baseUri}/accounts?start-date={start.ToUnixTimeSeconds()}&end-date={end.ToUnixTimeSeconds()}";
+        var requestUri =
+            $"{baseUri}/accounts?start-date={start.ToUnixTimeSeconds()}&end-date={end.ToUnixTimeSeconds()}";
+        if (includePending)
+        {
+            requestUri += "&pending=1";
+        }
 
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
         request.Headers.Authorization = authHeader;

@@ -22,7 +22,7 @@ internal sealed class FakeSimpleFinClient(SimpleFinAccountSet? result = null, Ex
     public Task<string> ClaimAsync(string setupToken, CancellationToken ct = default) =>
         Task.FromResult("https://user:pass@bridge.simplefin.org/simplefin");
 
-    public Task<SimpleFinAccountSet> GetAccountsAsync(string accessUrl, DateTimeOffset start, DateTimeOffset end, CancellationToken ct = default)
+    public Task<SimpleFinAccountSet> GetAccountsAsync(string accessUrl, DateTimeOffset start, DateTimeOffset end, bool includePending = false, CancellationToken ct = default)
     {
         LastAccessUrl = accessUrl;
         if (throws is not null)

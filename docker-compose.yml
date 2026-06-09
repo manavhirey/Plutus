@@ -32,6 +32,8 @@ services:
       - Plutus__Backfill__Notes=${PLUTUS_BACKFILL_NOTES:-false}
       # One-off transfer backfill: set PLUTUS_BACKFILL_TRANSFERS=true in .env to run once, then unset.
       - Plutus__Backfill__Transfers=${PLUTUS_BACKFILL_TRANSFERS:-false}
+      # One-off sync diagnostic: set PLUTUS_DIAG_SYNC=true in .env to log what SimpleFIN returns, then unset.
+      - Plutus__Diag__Sync=${PLUTUS_DIAG_SYNC:-false}
       # Optional overrides:
       # - Plutus__Sync__DailyTime=06:00
       # - Plutus__Claude__Model=claude-haiku-4-5

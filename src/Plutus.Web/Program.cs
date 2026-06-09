@@ -38,6 +38,7 @@ builder.Services.AddPlutusCore(builder.Configuration, $"Data Source={dbPath}");
 builder.Services.AddHostedService<DailySyncScheduler>();
 builder.Services.AddHostedService<NoteBackfillService>();
 builder.Services.AddHostedService<TransferBackfillService>();
+builder.Services.AddHostedService<SyncDiagnosticService>();
 
 var app = builder.Build();
 

@@ -43,7 +43,7 @@ public sealed class SyncService(
         try
         {
             var accessUrl = protector.Unprotect(connection.AccessUrl);
-            var set = await simpleFin.GetAccountsAsync(accessUrl, start, now, ct);
+            var set = await simpleFin.GetAccountsAsync(accessUrl, start, now, includePending: false, ct);
 
             var categories = await db.Categories
                 .AsNoTracking()
