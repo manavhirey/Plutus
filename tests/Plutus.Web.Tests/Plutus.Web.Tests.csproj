@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="bunit" Version="1.40.0" />
+    <!-- bUnit 1.40 transitively requests AngleSharp 1.2; pin the advisory-fixed release. -->
+    <PackageReference Include="AngleSharp" Version="1.5.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.8" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.8" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />

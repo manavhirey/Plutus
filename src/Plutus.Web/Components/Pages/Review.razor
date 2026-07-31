@@ -7,10 +7,10 @@
 <PageTitle>Plutus — Review</PageTitle>
 
 <div class="page-header">
-    <div class="page-title">Daily Review</div>
+    <h1 class="page-title">Daily Review</h1>
     @if (!_loading && _items.Count > 0)
     {
-        <div class="page-title-sub">@_items.Count TRANSACTION@(_items.Count == 1 ? "" : "S") PENDING</div>
+        <p class="page-title-sub">@_items.Count TRANSACTION@(_items.Count == 1 ? "" : "S") AWAITING REVIEW</p>
     }
 </div>
 
@@ -24,9 +24,9 @@
 else if (_items.Count == 0)
 {
     <div class="empty-state">
-        <div class="empty-icon">✓</div>
-        <p style="font-weight:600; color:var(--text); margin-bottom:.35rem">All caught up</p>
-        <p>No transactions pending review.</p>
+        <div class="empty-icon" aria-hidden="true">✓</div>
+        <p class="empty-state-title">No transactions currently awaiting review</p>
+        <p>New transactions may appear after a future sync.</p>
     </div>
 }
 else
@@ -40,7 +40,7 @@ else
                         <span class="review-date">@item.PostedDate.ToLocalTime().ToString("MMM d, yyyy")</span>
                         <span class="review-desc">@item.Description</span>
                     </div>
-                    <span class="review-amount">@Money.Expense(item.Amount)</span>
+                    <span class="review-amount">@CurrencyAmountFormatter.FormatExpense(item.Amount, item.Currency)</span>
                 </div>
 
                 <div class="review-fields">
@@ -98,6 +98,7 @@ else
         _categories = await db.Categories.AsNoTracking().OrderBy(c => c.SortOrder).ToListAsync();
 
         var pending = await db.Transactions.AsNoTracking()
+            .Include(t => t.Account)
             .Where(t => !t.IsReviewed)
             .OrderByDescending(t => t.PostedDate)
             .ToListAsync();
@@ -109,6 +110,7 @@ else
                 Id = t.Id,
                 Description = t.Description,
                 Amount = t.Amount,
+                Currency = t.Account?.Currency,
                 PostedDate = t.PostedDate,
                 OriginalCategoryId = t.CategoryId ?? 0,
                 SelectedCategoryId = t.CategoryId ?? 0,
@@ -197,6 +199,7 @@ else
         public int Id { get; init; }
         public string Description { get; init; } = "";
         public decimal Amount { get; init; }
+        public string? Currency { get; init; }
         public DateTime PostedDate { get; init; }
         public int OriginalCategoryId { get; init; }
         public int SelectedCategoryId { get; set; }

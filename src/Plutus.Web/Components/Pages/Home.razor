@@ -22,38 +22,40 @@
 else
 {
     <div class="page-header">
-        <div class="page-title">Dashboard</div>
-        <div class="page-title-sub">@DateTime.Now.ToString("dddd, MMMM d, yyyy").ToUpper()</div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-title-sub">@DateTime.Now.ToString("dddd, MMMM d, yyyy").ToUpper()</p>
     </div>
 
-    <div class="card-grid">
-        <div class="stat-card">
-            <div class="stat-label">Needs Review</div>
+    <div class="card-grid dashboard-summary-grid" aria-label="Dashboard summary">
+        <section class="stat-card" aria-labelledby="review-summary-heading">
+            <h2 id="review-summary-heading" class="stat-label">Transactions awaiting review</h2>
             <div class="stat-value @(_needsReview > 0 ? "highlight" : "")">@_needsReview</div>
             @if (_needsReview > 0)
             {
-                <a href="review" class="muted" style="font-size:.78rem; text-decoration:none; color:var(--accent);">Review now →</a>
+                <a href="review" class="inline-action">Review transactions <span aria-hidden="true">→</span></a>
             }
             else
             {
-                <span class="muted">All clear</span>
+                <span class="muted">No transactions currently awaiting review</span>
             }
-        </div>
+        </section>
 
-        <div class="stat-card">
-            <div class="stat-label" style="display:flex; justify-content:space-between; align-items:center">
-                <span>Last Sync</span>
+        <section class="stat-card" aria-labelledby="sync-summary-heading">
+            <div class="stat-label stat-label-with-control">
+                <h2 id="sync-summary-heading">Latest sync attempt</h2>
                 @if (_hasConnection)
                 {
                     <button class="sync-now-btn" disabled="@_syncing" @onclick="SyncNowAsync"
-                            title="Sync now" aria-label="Sync now">
+                            aria-describedby="sync-status-detail">
                         @if (_syncing)
                         {
                             <span class="btn-spinner"></span>
+                            <span>Syncing</span>
                         }
                         else
                         {
-                            <span>↻</span>
+                            <span aria-hidden="true">↻</span>
+                            <span>Sync now</span>
                         }
                     </button>
                 }
@@ -61,102 +63,115 @@ else
             @if (_lastRun is null)
             {
                 <div class="stat-value" style="font-size:1rem; color:var(--gray)">Never</div>
-                <span class="muted">Connect SimpleFIN in Settings</span>
+                <span id="sync-status-detail" class="muted">Connect SimpleFIN in <a href="settings" class="inline-action">Settings</a></span>
             }
             else
             {
                 var ok = _lastRun.Status == SyncStatus.Success;
-                <div class="stat-value" style="font-size:1rem; display:flex; align-items:center; gap:.35rem">
-                    <span class="status-dot @(ok ? "ok" : "bad")"></span>@_lastRun.Status
+                <div class="stat-value sync-status" style="font-size:1rem">
+                    <span class="status-dot @(ok ? "ok" : "bad")" aria-hidden="true"></span><span>@_lastRun.Status</span>
                 </div>
-                <span class="muted">@_lastRun.RanAt.ToLocalTime().ToString("MMM d · h:mm tt") · @_lastRun.NewTransactionCount new</span>
+                <span id="sync-status-detail" class="muted">@_lastRun.RanAt.ToLocalTime().ToString("MMM d · h:mm tt") · @_lastRun.NewTransactionCount new</span>
             }
-        </div>
+        </section>
 
-        <div class="stat-card">
-            <div class="stat-label">Net Worth</div>
-            @if (_netWorth is null)
-            {
-                <div class="stat-value" style="font-size:1rem; color:var(--gray)">—</div>
-            }
-            else
-            {
-                <div class="stat-value amount" style="font-size:1.4rem">@Money.Plain(_netWorth.Total)</div>
-                <span class="muted">Assets @Money.Plain(_netWorth.Assets) · Cards @Money.Plain(_netWorth.Cards)</span>
-            }
-        </div>
+        @if (_canRenderAggregates)
+        {
+            <section class="stat-card" aria-labelledby="net-worth-heading">
+                <h2 id="net-worth-heading" class="stat-label">Net worth · @_aggregateCurrency</h2>
+                @if (_netWorth is null)
+                {
+                    <div class="stat-value" style="font-size:1rem; color:var(--gray)">—</div>
+                }
+                else
+                {
+                    <div class="stat-value amount" style="font-size:1.4rem">@CurrencyAmountFormatter.Format(_netWorth.Total, _aggregateCurrency)</div>
+                    <span class="muted">Assets @CurrencyAmountFormatter.Format(_netWorth.Assets, _aggregateCurrency) · Cards @CurrencyAmountFormatter.Format(_netWorth.Cards, _aggregateCurrency)</span>
+                }
+            </section>
 
-        <div class="stat-card">
-            <div class="stat-label">Top Category · This Month</div>
-            @if (_topCategory is null)
-            {
-                <div class="stat-value" style="font-size:1rem; color:var(--gray)">—</div>
-                <span class="muted">No spending yet</span>
-            }
-            else
-            {
-                <div class="stat-value amount" style="font-size:1.4rem">@Money.Plain(_topCategory.Total)</div>
-                <span class="muted">@_topCategory.Name · @($"{_topCategory.Share:P0}") of spend</span>
-            }
-        </div>
+            <section class="stat-card" aria-labelledby="top-category-heading">
+                <h2 id="top-category-heading" class="stat-label">Top category · this month</h2>
+                @if (_topCategory is null)
+                {
+                    <div class="stat-value" style="font-size:1rem; color:var(--gray)">—</div>
+                    <span class="muted">No spending data yet</span>
+                }
+                else
+                {
+                    <div class="stat-value amount" style="font-size:1.4rem">@CurrencyAmountFormatter.Format(_topCategory.Total, _aggregateCurrency)</div>
+                    <span class="muted">@_topCategory.Name · @($"{_topCategory.Share:P0}") of spend</span>
+                }
+            </section>
+        }
     </div>
 
-    <div class="section-label" style="margin-top:2rem">This Month · Spending by Category</div>
-    <div class="card">
-        @if (_spend.Count == 0)
+    @if (_canRenderAggregates)
+    {
+        <section aria-labelledby="spending-heading">
+            <h2 id="spending-heading" class="section-label">This month · spending by category (current categorization) · @_aggregateCurrency</h2>
+            <div class="card dashboard-spending-card">
+                @if (_spend.Count == 0)
+                {
+                    <div class="empty-state">
+                        <div class="empty-icon" aria-hidden="true">📊</div>
+                        <p class="empty-state-title">No spending data yet</p>
+                        <p>Categorized transactions will appear here once synced.</p>
+                    </div>
+                }
+                else
+                {
+                    <RadzenChart SeriesClick="@OnSeriesClick" Style="@_chartStyle" aria-label="Spending by category using current categorization">
+                        <RadzenBarSeries TItem="CategorySpend"
+                                         Data="@_spend"
+                                         CategoryProperty="Name"
+                                         ValueProperty="Total"
+                                         Fills="@_fills"
+                                         Title="Spending" />
+                        <RadzenValueAxis Formatter="@FormatAsCurrency">
+                            <RadzenAxisTitle Text="@($"Amount ({_aggregateCurrency})")" />
+                        </RadzenValueAxis>
+                        <RadzenLegend Visible="false" />
+                    </RadzenChart>
+                }
+            </div>
+        </section>
+    }
+
+    <section aria-labelledby="accounts-heading">
+        <h2 id="accounts-heading" class="section-label">Accounts</h2>
+        @if (_accounts.Count == 0)
         {
             <div class="empty-state">
-                <div class="empty-icon">📊</div>
-                <p style="font-weight:600; color:var(--text); margin-bottom:.35rem">No spending data yet</p>
-                <p>Categorized transactions will appear here once synced.</p>
+                <div class="empty-icon" aria-hidden="true">🏦</div>
+                <p class="empty-state-title">No accounts connected</p>
+                <p><a href="settings" class="inline-action">Connect SimpleFIN in Settings</a> to start syncing.</p>
             </div>
         }
         else
         {
-            <RadzenChart SeriesClick="@OnSeriesClick" Style="@_chartStyle">
-                <RadzenBarSeries TItem="CategorySpend"
-                                 Data="@_spend"
-                                 CategoryProperty="Name"
-                                 ValueProperty="Total"
-                                 Fills="@_fills"
-                                 Title="Spending" />
-                <RadzenValueAxis Formatter="@FormatAsCurrency">
-                    <RadzenAxisTitle Text="Amount ($)" />
-                </RadzenValueAxis>
-                <RadzenLegend Visible="false" />
-            </RadzenChart>
-        }
-    </div>
-
-    <div class="section-label" style="margin-top:2rem">Accounts</div>
-
-    @if (_accounts.Count == 0)
-    {
-        <div class="empty-state">
-            <div class="empty-icon">🏦</div>
-            <p style="font-weight:600; color:var(--text); margin-bottom:.35rem">No accounts connected</p>
-            <p><a href="settings" style="color:var(--accent); text-decoration:none">Connect SimpleFIN in Settings</a> to start syncing.</p>
-        </div>
-    }
-    else
-    {
-        <div class="card-grid">
-            @foreach (var account in _accounts)
+            @if (!_canRenderAggregates)
             {
-                <div class="stat-card">
-                    <div class="stat-label">@account.Name</div>
-                    <div class="stat-value amount" style="font-size:1.4rem">@Money.Plain(account.Balance)</div>
-                    <span class="muted">@(account.Org ?? account.Currency)</span>
-                    @{
-                        var stale = AccountFreshness.IsStale(account.BalanceDate, _now, _staleThreshold);
-                    }
-                    <span class="acct-updated @(stale ? "stale" : "")">
-                        @(stale ? "⚠️ " : "")Updated @AccountFreshness.Describe(account.BalanceDate, _now)
-                    </span>
-                </div>
+                <p class="currency-notice">Balances are shown by currency; no total is calculated.</p>
             }
-        </div>
-    }
+            <div class="card-grid dashboard-account-grid">
+                @foreach (var account in _accounts)
+                {
+                    <article class="stat-card">
+                        <h3 class="stat-label">@account.Name</h3>
+                        <div class="stat-value amount" style="font-size:1.4rem">@CurrencyAmountFormatter.Format(account.Balance, account.Currency)</div>
+                        <span class="muted">@(account.Org ?? account.Currency)</span>
+                        @{
+                            var stale = AccountFreshness.IsStale(account.BalanceDate, _now, _staleThreshold);
+                        }
+                        <span class="acct-updated @(stale ? "stale" : "")">
+                            @(stale ? "⚠️ " : "")Updated @AccountFreshness.Describe(account.BalanceDate, _now)
+                        </span>
+                    </article>
+                }
+            </div>
+        }
+    </section>
 }
 
 @code {
@@ -169,12 +184,14 @@ else
     private string _chartStyle = "height:300px";
     private NetWorth? _netWorth;
     private TopCategory? _topCategory;
+    private string? _aggregateCurrency;
     private bool _syncing;
     private bool _hasConnection;
     private DateTimeOffset _now;
     private TimeSpan _staleThreshold;
 
     private const string GrayFallback = "#808184";
+    private bool _canRenderAggregates => _aggregateCurrency is not null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -195,34 +212,38 @@ else
 
         await using var db = await DbFactory.CreateDbContextAsync();
         _accounts = await db.Accounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync();
+        _aggregateCurrency = ResolveAggregateCurrency(_accounts);
         _needsReview = await db.Transactions.CountAsync(t => !t.IsReviewed);
         _lastRun = await db.SyncRuns.AsNoTracking().OrderByDescending(r => r.RanAt).FirstOrDefaultAsync();
         _hasConnection = await db.SimpleFinConnections.AnyAsync();
 
-        try
+        if (_canRenderAggregates)
         {
-            var now = DateTime.Now;
-            _spend = await SpendingReport.GetMonthlySpendingAsync(now.Year, now.Month);
-            _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
-            _chartStyle = $"height:{_spend.Count * 44 + 60}px";
-            _topCategory = SpendingInsights.Top(_spend);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load monthly spending for the dashboard chart.");
-            _spend = [];
-            _fills = [];
-            _topCategory = null; // keep the Top Category card consistent with the emptied chart
-        }
+            try
+            {
+                var now = DateTime.Now;
+                _spend = await SpendingReport.GetMonthlySpendingAsync(now.Year, now.Month);
+                _fills = _spend.Select(s => s.Color ?? GrayFallback).ToList();
+                _chartStyle = $"height:{_spend.Count * 44 + 60}px";
+                _topCategory = SpendingInsights.Top(_spend);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to load monthly spending for the dashboard chart.");
+                _spend = [];
+                _fills = [];
+                _topCategory = null; // keep the Top Category card consistent with the emptied chart
+            }
 
-        try
-        {
-            _netWorth = await NetWorthReport.GetAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load net worth for the dashboard.");
-            _netWorth = null;
+            try
+            {
+                _netWorth = await NetWorthReport.GetAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to load net worth for the dashboard.");
+                _netWorth = null;
+            }
         }
     }
 
@@ -262,9 +283,27 @@ else
 
     private string FormatAsCurrency(object value)
     {
-        if (value is double d)
-            return $"${d:N0}";
-        return value?.ToString() ?? "";
+        return value switch
+        {
+            decimal decimalValue => CurrencyAmountFormatter.Format(decimalValue, _aggregateCurrency),
+            double doubleValue => CurrencyAmountFormatter.Format((decimal)doubleValue, _aggregateCurrency),
+            float floatValue => CurrencyAmountFormatter.Format((decimal)floatValue, _aggregateCurrency),
+            _ => value?.ToString() ?? "",
+        };
+    }
+
+    private static string? ResolveAggregateCurrency(IReadOnlyCollection<Account> accounts)
+    {
+        if (accounts.Count == 0)
+        {
+            return null;
+        }
+
+        var currency = accounts.First().Currency;
+        return CurrencyAmountFormatter.IsValidIso4217Code(currency) &&
+               accounts.All(account => string.Equals(account.Currency, currency, StringComparison.Ordinal))
+            ? currency
+            : null;
     }
 
     private void OnSeriesClick(SeriesClickEventArgs args)
