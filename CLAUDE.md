@@ -32,7 +32,7 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
   default model `gpt-5.6-luna` (`Plutus:OpenAI:Model`).
 
 ## Security / secrets
-- `OPENAI_API_KEY` is the only model secret — from env or the gitignored `.env`.
+- `OPENAI_API_KEY` is the only model secret — from the process environment.
   **Never commit `.env`** or put the key in config/DB.
 - The SimpleFIN access URL is stored **encrypted in the DB** via ASP.NET Data Protection;
   the key ring lives on the `plutus-data` volume — lose it and the connection can't decrypt.

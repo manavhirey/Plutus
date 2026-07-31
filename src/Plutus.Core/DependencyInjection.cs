@@ -35,14 +35,14 @@ public static class DependencyInjection
 
         services.AddSingleton(TimeProvider.System);
 
-        // API key comes from OPENAI_API_KEY (env / user-secrets); never from config or DB.
+        // API key comes from OPENAI_API_KEY in the process environment; never from config or DB.
         // Fail fast at startup rather than letting every categorization fail silently later.
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
                 "OPENAI_API_KEY is not set. Plutus needs it to categorize transactions — " +
-                "provide it via environment variable or user-secrets before starting the app.");
+                "provide it through the process environment before starting the app.");
         }
 
         services.AddSingleton(_ => new ResponsesClient(apiKey));

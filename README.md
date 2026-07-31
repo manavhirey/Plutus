@@ -63,8 +63,8 @@ Non-secret settings live in `src/Plutus.Web/appsettings.json` (override with
 | `Plutus:Sync:OverlapDays` | `3` | Re-fetch window on later syncs (deduped) |
 | `Plutus:OpenAI:Model` | `gpt-5.6-luna` | Categorization model |
 
-The OpenAI API key comes only from `OPENAI_API_KEY` (env / user-secrets) —
-never from config or the database.
+The OpenAI API key comes only from the `OPENAI_API_KEY` process environment
+variable — never from config or the database.
 
 ## Containerize
 

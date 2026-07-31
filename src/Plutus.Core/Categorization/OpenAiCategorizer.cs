@@ -92,10 +92,11 @@ public sealed class OpenAiCategorizer(
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Never let a provider failure break a sync — leave the transaction uncategorized.
-            logger.LogWarning(ex, "OpenAI categorization failed.");
+            // Do not attach the provider exception: its message/body can echo transaction data.
+            logger.LogWarning("OpenAI categorization failed (reason: provider_error).");
             return null;
         }
     }

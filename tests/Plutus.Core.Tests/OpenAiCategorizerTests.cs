@@ -3,6 +3,7 @@ using System.ClientModel;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
@@ -64,10 +65,30 @@ public sealed class OpenAiCategorizerTests
         var categoryEnum = format.GetProperty("schema").GetProperty("properties")
             .GetProperty("category").GetProperty("enum").EnumerateArray().Select(x => x.GetString());
         Assert.Equal(Categories.Select(x => x.Name), categoryEnum);
+
+        var required = format.GetProperty("schema").GetProperty("required")
+            .EnumerateArray().Select(x => x.GetString());
+        Assert.Equal(new[] { "category", "note", "confidence" }, required);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task CategorizeAsync_accepts_confidence_bounds(double confidence)
+    {
+        await using var server = new CapturedResponseServer();
+        var responseTask = server.RespondAsync(ResponseWithOutput(
+            $"{{\"category\":\"Groceries\",\"note\":\"Market\",\"confidence\":{confidence}}}"));
+
+        var result = await CreateCategorizer(server.Endpoint).CategorizeAsync("MARKET", null, Categories);
+
+        await responseTask;
+        Assert.Equal(confidence, result!.Confidence);
     }
 
     [Theory]
     [InlineData("{not-json")]
+    [InlineData("{\"category\":\"Groceries\",\"note\":\"Market\",\"confidence\":-0.01}")]
     [InlineData("{\"category\":\"Groceries\",\"note\":\"Market\",\"confidence\":1.1}")]
     [InlineData("{\"category\":\"Unknown\",\"note\":\"Market\",\"confidence\":0.5}")]
     public async Task CategorizeAsync_returns_null_for_invalid_or_unknown_structured_output(string output)
@@ -103,6 +124,29 @@ public sealed class OpenAiCategorizerTests
 
         await responseTask;
         Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task CategorizeAsync_logs_only_a_safe_reason_for_provider_errors()
+    {
+        const string merchantText = "SENSITIVE MERCHANT DESCRIPTION";
+        var credentialShapedText = "sk-" + "test-not-a-real-key-123";
+        await using var server = new CapturedResponseServer();
+        var responseTask = server.RespondAsync(
+            $"{{\"error\":{{\"message\":\"{merchantText} {credentialShapedText}\"}}}}",
+            statusCode: 400);
+        var logger = new CapturingLogger<OpenAiCategorizer>();
+        var categorizer = CreateCategorizer(server.Endpoint, logger: logger);
+
+        var result = await categorizer.CategorizeAsync(merchantText, null, Categories);
+
+        await responseTask;
+        Assert.Null(result);
+        var logOutput = string.Join("\n", logger.Messages);
+        Assert.Contains("reason: provider_error", logOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain(merchantText, logOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain(credentialShapedText, logOutput, StringComparison.Ordinal);
+        Assert.Empty(logger.Exceptions);
     }
 
     [Fact]
@@ -164,11 +208,14 @@ public sealed class OpenAiCategorizerTests
         }
     }
 
-    private static OpenAiCategorizer CreateCategorizer(Uri endpoint, string model = "gpt-5.6-luna") =>
+    private static OpenAiCategorizer CreateCategorizer(
+        Uri endpoint,
+        string model = "gpt-5.6-luna",
+        ILogger<OpenAiCategorizer>? logger = null) =>
         new(
             new ResponsesClient(new ApiKeyCredential("test-key"), new ResponsesClientOptions { Endpoint = endpoint }),
             Options.Create(new OpenAiOptions { Model = model }),
-            NullLogger<OpenAiCategorizer>.Instance);
+            logger ?? NullLogger<OpenAiCategorizer>.Instance);
 
     private static void WithOpenAiApiKey(string? value, Action action)
     {
@@ -277,4 +324,28 @@ public sealed class OpenAiCategorizerTests
     }
 
     private sealed record CapturedRequest(string Method, string Path, string Body);
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+        public List<Exception> Exceptions { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+            if (exception is not null)
+            {
+                Exceptions.Add(exception);
+            }
+        }
+    }
 }
