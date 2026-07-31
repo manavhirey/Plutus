@@ -6,12 +6,14 @@ services:
     working_dir: /workspace
     environment:
       ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       NUGET_PACKAGES: /root/.nuget/packages
     volumes:
       - .:/workspace
       - plutus-nuget:/root/.nuget/packages
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     command: dotnet test Plutus.slnx
 
 volumes:

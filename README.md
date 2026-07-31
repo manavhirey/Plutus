@@ -28,11 +28,12 @@ docker compose -f docker-compose.dev.yml run --rm dotnet
 
 # Start the app with hot reload at http://localhost:8080
 docker compose -f docker-compose.dev.yml run --rm --service-ports dotnet \
-  dotnet watch --project src/Plutus.Web run
+  dotnet watch --project src/Plutus.Web run --no-launch-profile
 ```
 
-Set `ANTHROPIC_API_KEY` in your shell before starting the app if you want AI
-categorization available. The app's local SQLite database and data-protection
+If `ANTHROPIC_API_KEY` is exported in your shell before starting the app, Docker
+passes it into the development container for AI categorization; it is never
+written to a project file. The app's local SQLite database and data-protection
 keys are written to the working tree and are ignored by Git.
 
 ## Run locally without Docker
