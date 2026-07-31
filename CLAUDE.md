@@ -10,6 +10,9 @@ build/run/config docs live in `README.md` — this file covers only what's non-o
   (or call `~/.dotnet/dotnet`) before any dotnet command, or it's "command not found".
 - **Docker only via `sg docker -c "..."`** — the user is in the `docker` group but the
   session predates it, and `sudo` needs a password/TTY. e.g. `sg docker -c "docker compose up -d"`.
+- **Compose secrets live only in the project-root `.env` file.** It is gitignored and must
+  be mode `0600`; Compose passes `OPENAI_API_KEY` into the app process. Never commit it or
+  store the key in app configuration or the database.
 - **Solution is `Plutus.slnx`** (XML solution format), not a `.sln`.
 
 ## Commands
@@ -32,8 +35,9 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
   default model `gpt-5.6-luna` (`Plutus:OpenAI:Model`).
 
 ## Security / secrets
-- `OPENAI_API_KEY` is the only model secret — from the process environment.
-  **Never commit `.env`** or put the key in config/DB.
+- `OPENAI_API_KEY` is the only model secret. For Docker Compose, keep it in the
+  gitignored project-root `.env` file; Compose provides it only through the process
+  environment. **Never commit `.env`** or put the key in app config/DB.
 - The SimpleFIN access URL is stored **encrypted in the DB** via ASP.NET Data Protection;
   the key ring lives on the `plutus-data` volume — lose it and the connection can't decrypt.
 - `Program.cs` trusts `X-Forwarded-*` only from RFC1918 peers with `ForwardLimit = 1`;

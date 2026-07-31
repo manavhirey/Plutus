@@ -22,22 +22,27 @@ All development commands can run in the .NET 10 SDK container; no .NET SDK is
 needed on the host. The source tree is mounted into the container and NuGet
 packages are retained in the `plutus-nuget` Docker volume.
 
+Before starting the app, create the project-root `.env` file (it is ignored by
+Git) and add:
+
+```env
+OPENAI_API_KEY=...
+```
+
 ```bash
 # Restore, build, and run the complete test suite
 docker compose -f docker-compose.dev.yml run --rm dotnet
-
-# The app requires an API key; export it before starting hot reload.
-export OPENAI_API_KEY=...
 
 # Start the app with hot reload at http://localhost:8080
 docker compose -f docker-compose.dev.yml run --rm --service-ports dotnet \
   dotnet watch --project src/Plutus.Web run --no-launch-profile
 ```
 
-The test command does not need an API key. Docker passes the exported key into
-the development container for the app, but it is never written to a project
-file. The app's local SQLite database and data-protection keys are written to
-the working tree and are ignored by Git.
+The test command does not need an API key. Docker Compose reads the gitignored
+project-root `.env` file and passes the key only into the app process. It is
+never written to a project file, app configuration, or the database. The app's
+local SQLite database and data-protection keys are written to the working tree
+and are ignored by Git.
 
 ## Run locally without Docker
 
@@ -63,8 +68,10 @@ Non-secret settings live in `src/Plutus.Web/appsettings.json` (override with
 | `Plutus:Sync:OverlapDays` | `3` | Re-fetch window on later syncs (deduped) |
 | `Plutus:OpenAI:Model` | `gpt-5.6-luna` | Categorization model |
 
-The OpenAI API key comes only from the `OPENAI_API_KEY` process environment
-variable — never from config or the database.
+For Docker Compose, put the key in the gitignored project-root `.env` file as
+`OPENAI_API_KEY=...`; Compose supplies it to the app's process environment. The
+app reads the key only from that process environment — never from app config or
+the database — and the `.env` file must never be committed.
 
 ## Containerize
 
@@ -75,8 +82,8 @@ No Dockerfile — Plutus uses the .NET 10 SDK's built-in container publishing
 # Build the image into your local Docker daemon
 dotnet publish src/Plutus.Web -c Release /t:PublishContainer
 
-# Run with persistence + your API key
-OPENAI_API_KEY=... docker compose up -d
+# Docker Compose reads OPENAI_API_KEY from the gitignored project-root .env file.
+docker compose up -d
 ```
 
 The `plutus-data` volume holds both the SQLite DB and the Data Protection key ring,

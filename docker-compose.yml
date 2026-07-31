@@ -20,7 +20,8 @@ services:
       plutus-init:
         condition: service_completed_successfully
     environment:
-      # Required: your OpenAI API key for categorization.
+      # Required: Docker Compose reads this from the gitignored project-root .env file
+      # and supplies it only to the app process; never commit it or store it in app config/DB.
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # Optional: headless first-time SimpleFIN provisioning (single-use setup token).
       # Claimed on startup if no connection exists yet; ignored afterwards.

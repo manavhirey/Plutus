@@ -7,6 +7,7 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: Development
+      # Compose reads the gitignored project-root .env file; the app receives the key only in its process environment.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       NUGET_PACKAGES: /root/.nuget/packages
     volumes:
