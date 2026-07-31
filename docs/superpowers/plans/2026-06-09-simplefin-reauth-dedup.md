@@ -851,11 +851,11 @@ git commit -m "feat(web): add config-gated AccountMergeBackfill + compose flag"
 
 - [ ] **Step 1: Snapshot the prod DB (reversible safety net)**
 
-```bash
-sg docker -c "docker cp plutus:/data/plutus.db /tmp/plutus.backup-$(date +%s).db"
-sg docker -c "docker cp plutus:/data/plutus.db-wal /tmp/plutus.backup.db-wal" 2>/dev/null || true
-sg docker -c "docker cp plutus:/data/plutus.db-shm /tmp/plutus.backup.db-shm" 2>/dev/null || true
-```
+> **Superseded safety guidance (2026-07-31):** Do not use sequential live `docker cp`
+> commands for the SQLite database, WAL, and SHM files. Before this historical plan is
+> executed, quiesce the app and take a coherent recovery backup, or use a SQLite-supported
+> online backup/storage snapshot that guarantees a consistent database/WAL/SHM set. Include
+> the Data Protection key ring. Follow the current [production cutover checklist](../../../README.md#production-authentication-cutover-checklist).
 
 - [ ] **Step 2: Enable the heal flag, build, deploy**
 
@@ -873,10 +873,10 @@ sg docker -c "docker logs plutus 2>&1 | grep -i 'account-merge backfill'"
 ```
 Expected: "complete: 1+ groups merged, 5 accounts deleted, … transactions repointed, 1 duplicate transactions deleted."
 
-Then copy the DB out (with WAL) and confirm 6 accounts and the corrected total:
+Using the same quiesced or SQLite-supported coherent backup from Step 1, confirm 6 accounts
+and the corrected total. Never create a separate sequential live copy for verification:
 
 ```bash
-rm -f /tmp/verify.db*; for f in plutus.db plutus.db-wal plutus.db-shm; do sg docker -c "docker cp plutus:/data/$f /tmp/verify.db${f#plutus.db}" 2>/dev/null; done
 python3 -c "import sqlite3; c=sqlite3.connect('/tmp/verify.db').cursor(); print('accounts:', c.execute('SELECT COUNT(*) FROM Accounts').fetchone()[0]); print('sum balances:', c.execute('SELECT ROUND(SUM(Balance),2) FROM Accounts').fetchone()[0])"
 ```
 Expected: accounts: 6; sum balances ≈ 53847.32.

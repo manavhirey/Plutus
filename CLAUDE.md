@@ -58,11 +58,11 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
   single-container deployment—replace it with shared coordination before adding replicas. Cookies
   are HTTPS-only in every environment. Docker hot reload uses a gitignored local PFX in
   `.dev-certs/`, mounted read-only with its password supplied by protected `.env`; never commit it.
-  Keep Caddy's HTTPS forwarding intact. After any database restore, run one authenticated
-  startup with `PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP=true` (the Compose mapping
-  supplies `Plutus:Authentication:RevokeAllSessionsOnStartup`), verify it started, then
-  unset the flag and restart; the revocation write happens before endpoints host and fails
-  startup if unavailable. Back up/restore SQLite only while quiesced or through a
+  Keep Caddy's HTTPS forwarding intact. After any database restore, keep the app quiesced
+  or reverse-proxy access-controlled and run `docker compose run --rm plutus
+  --revoke-all-sessions`; it migrates if necessary, atomically revokes every session, reports
+  sanitized success, and exits without hosting. A failure means do not start/expose the app;
+  after success, run normal authenticated Compose startup. Back up/restore SQLite only while quiesced or through a
   SQLite-supported consistent backup/snapshot (database + WAL + SHM) together with the
   Data Protection keys. Never expose the pre-authentication image publicly as rollback;
   keep it offline or behind temporary reverse-proxy access control until an authenticated
@@ -98,8 +98,9 @@ it's inert again. Add new one-offs by copying this pattern (and wire the compose
 
 ## Inspecting the prod database
 SQLite lives at `/data/plutus.db` in the `plutus` container (`plutus-data` volume), in **WAL mode**:
-- Copy **all three** files together or you read stale data: `plutus.db`, `plutus.db-wal`, `plutus.db-shm`
-  (e.g. `sg docker -c "docker cp plutus:/data/plutus.db /tmp/x.db"` plus the `-wal`/`-shm`).
+- Never make sequential live `docker cp` copies of `plutus.db`, `plutus.db-wal`, and
+  `plutus.db-shm`. Quiesce the app first, or use a SQLite-supported online backup or storage
+  snapshot that guarantees a coherent set. Include Data Protection keys for any recovery backup.
 - No `sqlite3` on the host — use `python3` (built-in `sqlite3` module).
 - `Transaction.Amount` is stored as **text** (decimal converter), so numeric SQL like `WHERE Amount=2.40`
   silently misses — compare as text or filter in Python.

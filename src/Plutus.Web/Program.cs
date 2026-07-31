@@ -2,6 +2,8 @@ using System.Net;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Plutus.Core;
 using Plutus.Core.Data;
 using Plutus.Core.SimpleFin;
@@ -25,11 +27,50 @@ if (PasswordHashGenerator.IsRequested(args))
     return;
 }
 
+if (AdministratorSessionRecoveryCommand.IsMentioned(args))
+{
+    if (!AdministratorSessionRecoveryCommand.IsRequested(args))
+    {
+        Console.Error.WriteLine($"Use {AdministratorSessionRecoveryCommand.Command} by itself.");
+        Environment.ExitCode = 2;
+        return;
+    }
+
+    try
+    {
+        // This builds only the data services. It never creates a WebApplication,
+        // maps endpoints, starts hosted services, or listens on a network port.
+        var recoveryBuilder = Host.CreateApplicationBuilder();
+        var recoveryDbPath = recoveryBuilder.Configuration["Plutus:Database:Path"] ?? "plutus.db";
+        if (!Path.IsPathRooted(recoveryDbPath))
+        {
+            recoveryDbPath = Path.Combine(recoveryBuilder.Environment.ContentRootPath, recoveryDbPath);
+        }
+
+        recoveryBuilder.Services.AddDbContextFactory<PlutusDbContext>(options =>
+            options.UseSqlite($"Data Source={recoveryDbPath}"));
+        recoveryBuilder.Services.AddSingleton(TimeProvider.System);
+        recoveryBuilder.Services.AddScoped<AdministratorSessionStore>();
+        using var recoveryHost = recoveryBuilder.Build();
+        Environment.ExitCode = await AdministratorSessionRecoveryCommand.ExecuteAsync(
+            recoveryHost.Services,
+            Console.Out,
+            Console.Error);
+    }
+    catch (Exception)
+    {
+        // Do not expose database paths, connection details, or provider messages.
+        Console.Error.WriteLine("Session recovery failed; Plutus was not started.");
+        Environment.ExitCode = 2;
+    }
+
+    return;
+}
+
 // Deliberately validate this before registering external services or touching the
 // database. A deployment with a missing or malformed admin hash never starts.
 var builder = WebApplication.CreateBuilder(args);
 var passwordHash = PlutusAuthentication.GetRequiredPasswordHash();
-var revokeAllSessionsOnStartup = PlutusAuthentication.GetRevokeAllSessionsOnStartup(builder.Configuration);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -75,14 +116,6 @@ using (var scope = app.Services.CreateScope())
     // unavailable, startup fails rather than allowing a prior hash generation to
     // become valid again after a configuration rollback.
     var sessions = scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>();
-    if (revokeAllSessionsOnStartup)
-    {
-        // Recovery-only flag: a restored database can otherwise contain active
-        // session records for cookies that were valid before the backup was made.
-        // Any persistence failure aborts startup before endpoints are hosted.
-        await sessions.RevokeAllSessionsAsync();
-    }
-
     await sessions.RevokeActiveSessionsWithDifferentFingerprintAsync(
         PlutusAuthentication.GetPasswordHashFingerprint(passwordHash));
 }

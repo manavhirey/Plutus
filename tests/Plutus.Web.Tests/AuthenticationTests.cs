@@ -11,7 +11,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Routing;
@@ -37,24 +36,16 @@ public sealed class AuthenticationTests
     }
 
     [Fact]
-    public void Restore_session_revocation_flag_is_strictly_parsed()
+    public void Session_recovery_command_requires_exactly_one_argument()
     {
-        var enabled = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                [PlutusAuthentication.RevokeAllSessionsOnStartupConfigurationKey] = "true",
-            })
-            .Build();
-        var malformed = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                [PlutusAuthentication.RevokeAllSessionsOnStartupConfigurationKey] = "not-a-boolean",
-            })
-            .Build();
-
-        Assert.True(PlutusAuthentication.GetRevokeAllSessionsOnStartup(enabled));
-        Assert.Throws<InvalidOperationException>(() =>
-            PlutusAuthentication.GetRevokeAllSessionsOnStartup(malformed));
+        Assert.True(AdministratorSessionRecoveryCommand.IsRequested(
+            [AdministratorSessionRecoveryCommand.Command]));
+        Assert.True(AdministratorSessionRecoveryCommand.IsMentioned(
+            [AdministratorSessionRecoveryCommand.Command, "unexpected"]));
+        Assert.True(AdministratorSessionRecoveryCommand.IsMentioned(
+            [$"{AdministratorSessionRecoveryCommand.Command}=unexpected"]));
+        Assert.False(AdministratorSessionRecoveryCommand.IsRequested(
+            [AdministratorSessionRecoveryCommand.Command, "unexpected"]));
     }
 
     [Fact]
@@ -221,35 +212,36 @@ public sealed class AuthenticationTests
     }
 
     [Fact]
-    public async Task Restored_database_startup_flag_revokes_sessions_with_the_current_hash_before_hosting()
+    public async Task Explicit_recovery_command_revokes_sessions_with_the_current_hash()
     {
         await using var original = await TestApplication.StartAsync();
         var login = await original.GetLoginAsync();
         var signIn = await original.PostLoginAsync(login, original.Password, "/finance");
         var retainedCookie = TestApplication.GetCookie(signIn, original.SessionCookieName);
 
-        await using var restored = await TestApplication.StartAsync(
-            password: original.Password,
-            passwordHash: original.PasswordHash,
-            databasePath: original.DatabasePath,
-            dataProtectionPath: original.DataProtectionPath,
-            revokeAllSessionsOnStartup: true);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var exitCode = await original.ExecuteRecoveryCommandAsync(output, error);
 
-        Assert.Equal(HttpStatusCode.Redirect, (await restored.GetAsync("/finance", retainedCookie)).StatusCode);
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        Assert.Contains("sessions were revoked", output.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.Redirect, (await original.GetAsync("/finance", retainedCookie)).StatusCode);
     }
 
     [Fact]
-    public async Task Restore_session_revocation_failure_aborts_startup_before_the_application_is_available()
+    public async Task Recovery_command_failure_does_not_report_success_or_host_a_new_application()
     {
-        await using var original = await TestApplication.StartAsync();
-        await original.BreakSessionStoreAsync();
+        await using var app = await TestApplication.StartAsync();
+        await app.BreakSessionStoreAsync();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
 
-        await Assert.ThrowsAnyAsync<Exception>(() => TestApplication.StartAsync(
-            password: original.Password,
-            passwordHash: original.PasswordHash,
-            databasePath: original.DatabasePath,
-            dataProtectionPath: original.DataProtectionPath,
-            revokeAllSessionsOnStartup: true));
+        var exitCode = await app.ExecuteRecoveryCommandAsync(output, error);
+
+        Assert.Equal(2, exitCode);
+        Assert.DoesNotContain("revoked", output.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Session recovery failed; Plutus was not started.", error.ToString().Trim());
     }
 
     [Fact]
@@ -455,8 +447,7 @@ public sealed class AuthenticationTests
             string? password = null,
             string? passwordHash = null,
             string? databasePath = null,
-            string? dataProtectionPath = null,
-            bool revokeAllSessionsOnStartup = false)
+            string? dataProtectionPath = null)
         {
             password ??= $"test-{Guid.NewGuid():N}";
             passwordHash ??= new PasswordHasher<object>().HashPassword(new object(), password);
@@ -465,14 +456,6 @@ public sealed class AuthenticationTests
             {
                 EnvironmentName = environmentName,
             });
-            if (revokeAllSessionsOnStartup)
-            {
-                builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    [PlutusAuthentication.RevokeAllSessionsOnStartupConfigurationKey] = "true",
-                });
-            }
-
             builder.WebHost.UseTestServer();
             var ownsDatabasePath = databasePath is null;
             databasePath ??= Path.Combine(Path.GetTempPath(), $"plutus-auth-{Guid.NewGuid():N}.db");
@@ -504,11 +487,6 @@ public sealed class AuthenticationTests
                     await using var db = await factory.CreateDbContextAsync();
                     await db.Database.MigrateAsync();
                     var sessions = scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>();
-                    if (PlutusAuthentication.GetRevokeAllSessionsOnStartup(application.Configuration))
-                    {
-                        await sessions.RevokeAllSessionsAsync();
-                    }
-
                     await sessions.RevokeActiveSessionsWithDifferentFingerprintAsync(
                         PlutusAuthentication.GetPasswordHashFingerprint(passwordHash));
                 }
@@ -619,6 +597,9 @@ public sealed class AuthenticationTests
             await using var db = await factory.CreateDbContextAsync();
             await db.Database.ExecuteSqlRawAsync("DROP TABLE AdministratorSessions");
         }
+
+        public Task<int> ExecuteRecoveryCommandAsync(TextWriter output, TextWriter error) =>
+            AdministratorSessionRecoveryCommand.ExecuteAsync(_application.Services, output, error);
 
         public async Task<AdministratorSessionOperationCoordinator.AdministratorSessionOperationLease?> AcquireLeaseAsync(
             Guid sessionId,

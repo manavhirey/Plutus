@@ -32,9 +32,6 @@ services:
       # Persist the SQLite DB and the Data Protection key ring onto the volume.
       - Plutus__Database__Path=/data/plutus.db
       - Plutus__DataProtectionKeysPath=/data/keys
-      # Recovery only: set PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP=true for
-      # exactly one startup after restoring SQLite data, then unset and restart.
-      - Plutus__Authentication__RevokeAllSessionsOnStartup=${PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP:-false}
       # One-off note backfill: set PLUTUS_BACKFILL_NOTES=true in .env to run once, then unset.
       - Plutus__Backfill__Notes=${PLUTUS_BACKFILL_NOTES:-false}
       # One-off transfer backfill: set PLUTUS_BACKFILL_TRANSFERS=true in .env to run once, then unset.

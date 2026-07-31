@@ -119,7 +119,6 @@ Non-secret settings live in `src/Plutus.Web/appsettings.json` (override with
 | --- | --- | --- |
 | `Plutus:Database:Path` | `plutus.db` | SQLite file path |
 | `Plutus:DataProtectionKeysPath` | `keys` | Key-ring directory (encrypts the SimpleFIN access URL) |
-| `Plutus:Authentication:RevokeAllSessionsOnStartup` | `false` | Recovery-only: revoke every session before hosting after a database restore |
 | `Plutus:Sync:DailyTime` | `06:00` | Local time for the daily sync |
 | `Plutus:Sync:LookBackDays` | `30` | First-run look-back window |
 | `Plutus:Sync:OverlapDays` | `3` | Re-fetch window on later syncs (deduped) |
@@ -181,24 +180,25 @@ database contents into this repository.
    is running again. After this rollout, retain a known-good authenticated image and
    its protected configuration as the normal rollback target.
 3. After **any** database restore, invalidate restored sessions before public exposure.
-   Start the authenticated image once with the non-secret, one-shot Compose override:
+   With the app still quiesced or access-controlled, run the explicit one-off command
+   against the existing Compose project and persistent volume:
 
    ```bash
-   PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP=true docker compose up -d
+   docker compose run --rm plutus --revoke-all-sessions
    ```
 
-   The app revokes every unrevoked SQLite session before it hosts endpoints; if that
-   write fails, startup fails closed. Verify the container started successfully, then
-   remove the override and restart normally so later restarts do not deliberately
-   sign out active sessions:
+   It migrates the database if required, atomically revokes every unrevoked SQLite
+   session, reports sanitized success, and exits without hosting or listening. A
+   nonzero exit means recovery failed: do not start or expose the service. After the
+   success message, start the authenticated service normally:
 
    ```bash
-   PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP=false docker compose up -d
-   unset PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP
+   docker compose up -d
    ```
 
    This procedure needs no SQLite CLI and does not print, copy, or alter password
-   hashes or Data Protection keys.
+   hashes or Data Protection keys. It is a command, not a persistent environment
+   toggle, so subsequent restarts cannot silently revoke new sessions.
 4. Confirm anonymous `/finance` access redirects to login; sign in over the public
    HTTPS URL; then log out and verify that a retained pre-logout cookie from another
    browser context is rejected. Also leave an authenticated interactive page open
