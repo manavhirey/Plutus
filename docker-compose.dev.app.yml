@@ -1,6 +1,8 @@
 services:
   dotnet:
     environment:
+      # Required even in development: ordinary app startup always requires an admin password hash.
+      PLUTUS_AUTH_PASSWORD_HASH: ${PLUTUS_AUTH_PASSWORD_HASH:?Set PLUTUS_AUTH_PASSWORD_HASH in the protected project-root .env file before starting Plutus.}
       # Compose reads the protected project-root .env file and injects only this value
       # into the hot-reload app process. The secret file itself is not mounted.
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in the protected project-root .env file before starting the app.}

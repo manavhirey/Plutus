@@ -32,9 +32,24 @@ than putting a key in shell history:
 (umask 077 && touch .env) && chmod 600 .env && "${EDITOR:-vi}" .env
 ```
 
-In that editor, add the following line and save it (do not commit the file):
+First create a password hash without typing a password into a command, shell
+history, or project file. The command runs only the local hash generator and exits
+before the app, database, or any external service starts:
+
+```bash
+docker compose -f docker-compose.dev.yml run --rm -it dotnet \
+  dotnet run --project src/Plutus.Web -- --create-password-hash
+```
+
+Type and confirm a strong password at the hidden prompts. Copy the one generated
+`PLUTUS_AUTH_PASSWORD_HASH=...` line into the protected environment file. It is a
+password hash, not the password; still treat it as a sensitive deployment value.
+
+In the editor, add the generated line plus the following API-key line and save (do
+not commit the file):
 
 ```env
+PLUTUS_AUTH_PASSWORD_HASH=...
 OPENAI_API_KEY=...
 ```
 
@@ -50,13 +65,14 @@ docker compose -f docker-compose.dev.yml -f docker-compose.dev.app.yml run --rm 
   dotnet watch --project src/Plutus.Web run --no-launch-profile
 ```
 
-The default development Compose file deliberately does not inject
-`OPENAI_API_KEY`, so ordinary builds and tests do not require or receive it. The
-hot-reload command adds `docker-compose.dev.app.yml`, which reads the protected
-root `.env` file and passes only the key to the app process; the file itself is
-not visible in the container. The key is never written to a project file, app
-configuration, or the database. The app's local SQLite database and
-data-protection keys are written to the working tree and are ignored by Git.
+The default development Compose file deliberately does not inject either
+`OPENAI_API_KEY` or `PLUTUS_AUTH_PASSWORD_HASH`, so ordinary builds and tests do
+not require or receive them. The hot-reload command adds
+`docker-compose.dev.app.yml`, which reads the protected root `.env` file and
+passes only the needed values to the app process; the file itself is not visible
+in the container. Neither value is written to a project file, app configuration,
+or the database. The app's local SQLite database and data-protection keys are
+written to the working tree and are ignored by Git.
 
 ## Run locally without Docker
 
@@ -68,7 +84,10 @@ set +a
 dotnet run --project src/Plutus.Web
 ```
 
-When the app exits, run `unset OPENAI_API_KEY` or close that shell.
+When the app exits, run `unset OPENAI_API_KEY PLUTUS_AUTH_PASSWORD_HASH` or close
+that shell. Use the `https` launch profile (`https://localhost:7165`) for the
+local interactive app: authentication cookies are HTTPS-only and will not work
+over the `http` profile.
 
 The SQLite database and Data Protection keys are created under the app content root
 on first run; the schema migrates automatically at startup.
@@ -87,11 +106,22 @@ Non-secret settings live in `src/Plutus.Web/appsettings.json` (override with
 | `Plutus:Sync:OverlapDays` | `3` | Re-fetch window on later syncs (deduped) |
 | `Plutus:OpenAI:Model` | `gpt-5.6-luna` | Categorization model |
 
-For Docker Compose, put the key in the gitignored, owner-only project-root
-`.env` file as `OPENAI_API_KEY=...`. The hot-reload override and production
-Compose configuration supply it to the app's process environment. The app reads
-the key only from that process environment — never from app config or the
-database — and the `.env` file must never be committed.
+`PLUTUS_AUTH_PASSWORD_HASH` is a required process environment variable, not an
+appsetting. Every normal app startup (including Development) fails closed before
+database migration or external-service setup if it is missing or malformed. Create
+it only with the interactive `--create-password-hash` command above. The app has
+one administrator password; there is no registration, password reset, or recovery
+endpoint. Login is rate-limited and protected by antiforgery; sessions use secure,
+HTTP-only, same-site cookies and expire after eight hours of inactivity.
+
+For Docker Compose, put `OPENAI_API_KEY=...` and the generated
+`PLUTUS_AUTH_PASSWORD_HASH=...` in the gitignored, owner-only project-root `.env`
+file. The hot-reload override and production Compose configuration supply them to
+the app's process environment. The app reads both only from that process
+environment — never from app config or the database — and the `.env` file must
+never be committed. On the production host, add the hash to its protected
+deployment environment before running the new image; the container will refuse to
+start otherwise. Keep the existing HTTPS reverse proxy in front of the app.
 
 ## Containerize
 
@@ -102,8 +132,9 @@ No Dockerfile — Plutus uses the .NET 10 SDK's built-in container publishing
 # Build the image into your local Docker daemon
 dotnet publish src/Plutus.Web -c Release /t:PublishContainer
 
-# Docker Compose reads OPENAI_API_KEY from the protected project-root .env file
-# and injects it into the app container; it does not mount the .env file.
+# Docker Compose reads OPENAI_API_KEY and PLUTUS_AUTH_PASSWORD_HASH from the
+# protected project-root .env file and injects them into the app container; it
+# does not mount the .env file.
 docker compose up -d
 ```
 

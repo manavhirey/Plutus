@@ -5,9 +5,29 @@ using Microsoft.EntityFrameworkCore;
 using Plutus.Core;
 using Plutus.Core.Data;
 using Plutus.Core.SimpleFin;
+using Plutus.Web.Authentication;
 using Plutus.Web.BackgroundServices;
 using Plutus.Web.Components;
 using Radzen;
+
+if (PasswordHashGenerator.IsRequested(args))
+{
+    try
+    {
+        PasswordHashGenerator.Run(Console.In, Console.Out);
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        Environment.ExitCode = 2;
+    }
+
+    return;
+}
+
+// Deliberately validate this before registering external services or touching the
+// database. A deployment with a missing or malformed admin hash never starts.
+var passwordHash = PlutusAuthentication.GetRequiredPasswordHash();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +35,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddRadzenComponents();
+builder.Services.AddSingleAdministratorAuthentication();
 
 // Persist the Data Protection key ring to disk so the encrypted SimpleFIN access
 // URL stays decryptable across restarts (this folder is a volume when containerized).
@@ -106,10 +127,15 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
-app.MapStaticAssets();
+app.MapStaticAssets().AllowAnonymous();
+app.MapSingleAdministratorAuthentication(passwordHash);
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode()
+    .RequireAuthorization();
 
 app.Run();

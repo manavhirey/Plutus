@@ -197,6 +197,25 @@ button { font-family: inherit; }
 }
 .sidebar-nav a.active .nav-icon { opacity: 1; }
 
+.nav-link-button {
+    width: 100%;
+    padding: 0.55rem 0.85rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: rgba(244, 245, 246, 0.65);
+    text-align: left;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.nav-link-button:hover {
+    background: rgba(255, 255, 255, .08);
+    color: #F4F5F6;
+}
+
 /* Review badge */
 .nav-badge {
     margin-left: auto;

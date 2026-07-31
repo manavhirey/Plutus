@@ -37,11 +37,19 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
   default model `gpt-5.6-luna` (`Plutus:OpenAI:Model`).
 
 ## Security / secrets
-- `OPENAI_API_KEY` is the only model secret. For Docker Compose, keep it in the
-  gitignored, mode-`0600` project-root `.env` file. Production Compose and the separate
-  hot-reload override provide it only through the app process environment; default build/test
-  containers receive no key and cannot see `.env`. **Never commit `.env`** or put the key in
-  app config/DB.
+- `OPENAI_API_KEY` and `PLUTUS_AUTH_PASSWORD_HASH` are process-environment-only deployment
+  values. The latter is an ASP.NET password hash for Plutus's one administrator account, never
+  a plaintext password. Generate it interactively with
+  `dotnet run --project src/Plutus.Web -- --create-password-hash`; it exits before normal app
+  startup. Keep both in the gitignored, mode-`0600` project-root `.env` file. Production Compose
+  and the separate hot-reload override provide them only through the app process environment;
+  default build/test containers receive neither and cannot see `.env`. **Never commit `.env`**
+  or put either value in app config/DB.
+- `Program.cs` requires a valid `PLUTUS_AUTH_PASSWORD_HASH` before migrations or external-service
+  registration. It protects all application endpoints by default; only login and static assets
+  are anonymous. Cookies are `Secure`, `HttpOnly`, same-site strict, and expire after eight hours
+  of inactivity. Keep Caddy's HTTPS forwarding intact; local interactive development must use the
+  HTTPS launch profile because secure cookies are intentionally unusable over HTTP.
 - The SimpleFIN access URL is stored **encrypted in the DB** via ASP.NET Data Protection;
   the key ring lives on the `plutus-data` volume — lose it and the connection can't decrypt.
 - `Program.cs` trusts `X-Forwarded-*` only from RFC1918 peers with `ForwardLimit = 1`;

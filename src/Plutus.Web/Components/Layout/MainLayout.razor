@@ -34,6 +34,10 @@
                 </svg>
                 Settings
             </NavLink>
+            <form method="post" action="/logout" style="margin-top:auto">
+                <AntiforgeryToken />
+                <button type="submit" class="nav-link-button">Sign out</button>
+            </form>
         </nav>
     </aside>
     <main class="content">

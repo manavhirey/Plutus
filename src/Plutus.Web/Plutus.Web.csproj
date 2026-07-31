@@ -19,6 +19,10 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Plutus.Web.Tests" />
+  </ItemGroup>
+
   <!-- .NET SDK container publishing (no Dockerfile). Build with:
        dotnet publish src/Plutus.Web -c Release /t:PublishContainer
        Uses a chiseled, non-root base; "-extra" includes ICU + tzdata for

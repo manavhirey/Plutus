@@ -20,6 +20,9 @@ services:
       plutus-init:
         condition: service_completed_successfully
     environment:
+      # Required: an ASP.NET password hash for the sole Plutus administrator.
+      # Generate it interactively with --create-password-hash; never put a plaintext password here.
+      - PLUTUS_AUTH_PASSWORD_HASH=${PLUTUS_AUTH_PASSWORD_HASH:?Set PLUTUS_AUTH_PASSWORD_HASH in the protected project-root .env file before starting Plutus.}
       # Required: Docker Compose reads this from the gitignored project-root .env file
       # and supplies it only to the app process; never commit it or store it in app config/DB.
       - OPENAI_API_KEY=${OPENAI_API_KEY}
