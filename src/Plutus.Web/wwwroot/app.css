@@ -1064,6 +1064,10 @@ h1:focus { outline: none; }
     .sidebar-brand {
         grid-column: 1;
         grid-row: 1;
+        min-width: 44px;
+        min-height: 44px;
+        align-self: stretch;
+        justify-content: flex-start;
         padding: 0;
         border-bottom: none;
     }

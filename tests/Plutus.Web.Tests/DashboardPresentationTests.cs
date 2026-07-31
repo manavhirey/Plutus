@@ -107,9 +107,16 @@ public sealed class DashboardPresentationTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("Fixture category: 100.00 EUR", cut.Markup, StringComparison.Ordinal);
             Assert.NotNull(cut.FindComponent<RadzenBarSeries<CategorySpend>>().Instance.TooltipTemplate);
         });
+
+        var barSeries = cut.FindComponent<RadzenBarSeries<CategorySpend>>().Instance;
+        var tooltip = fixture.Context.Render(barSeries.TooltipTemplate!(new CategorySpend(7, "Fixture category", "#123456", 100m)));
+        Assert.Contains("Fixture category: 100.00 EUR", tooltip.Markup, StringComparison.Ordinal);
+
+        var fallback = cut.Find("ul.chart-text-fallback");
+        Assert.Equal("Spending by category values", fallback.GetAttribute("aria-label"));
+        Assert.Contains("Fixture category: 100.00 EUR", fallback.TextContent, StringComparison.Ordinal);
 
         var axis = cut.FindComponent<RadzenValueAxis>().Instance;
         Assert.Equal("100.00 EUR", axis.Formatter!(100m));
@@ -167,6 +174,9 @@ public sealed class DashboardPresentationTests
         var navigationText = layout.Find("nav").TextContent;
         Assert.Matches("Dashboard[\\s\\S]*Review[\\s\\S]*Transactions[\\s\\S]*Settings", navigationText);
         Assert.Contains("nav-icon", layout.Markup, StringComparison.Ordinal);
+        Assert.Equal("/", layout.Find("a.sidebar-brand").GetAttribute("href"));
+        Assert.Equal("/logout", layout.Find("form.sidebar-signout").GetAttribute("action"));
+        Assert.Equal("Sign out", layout.Find("form.sidebar-signout button.nav-link-button").TextContent.Trim());
     }
 
     [Fact]
@@ -207,13 +217,34 @@ public sealed class DashboardPresentationTests
         var projectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
         var cssPath = Path.Combine(projectRoot, "src", "Plutus.Web", "wwwroot", "app.css");
         var css = File.ReadAllText(cssPath);
+        var mobile = CssSection(css, "@media (max-width: 768px)", "@media (max-width: 430px)");
+        var narrow = CssSection(css, "@media (max-width: 430px)", "@media (max-width: 320px)");
+        var phone320 = CssSection(css, "@media (max-width: 320px)", "@media (prefers-reduced-motion: reduce)");
 
         Assert.Contains(":focus-visible", css, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion: reduce", css, StringComparison.Ordinal);
-        Assert.Contains("grid-template-rows: 44px 44px", css, StringComparison.Ordinal);
-        Assert.Contains("grid-template-columns: repeat(4, minmax(0, 1fr))", css, StringComparison.Ordinal);
-        Assert.Contains("@media (max-width: 320px)", css, StringComparison.Ordinal);
-        Assert.Contains(".sidebar-nav a .nav-icon", css, StringComparison.Ordinal);
+        Assert.Contains(".sidebar-brand", mobile, StringComparison.Ordinal);
+        Assert.Contains("min-height: 44px", mobile, StringComparison.Ordinal);
+        Assert.Contains("align-self: stretch", mobile, StringComparison.Ordinal);
+        Assert.Contains("grid-template-rows: 44px 44px", mobile, StringComparison.Ordinal);
+        Assert.Contains("grid-template-columns: repeat(4, minmax(0, 1fr))", mobile, StringComparison.Ordinal);
+        Assert.Contains(".sidebar-signout", mobile, StringComparison.Ordinal);
+        Assert.Contains("grid-column: 2", mobile, StringComparison.Ordinal);
+        Assert.Contains(".sidebar-signout .nav-link-button", mobile, StringComparison.Ordinal);
+        Assert.Contains(".sidebar-nav a", narrow, StringComparison.Ordinal);
+        Assert.Contains("min-height: 44px", narrow, StringComparison.Ordinal);
+        Assert.Contains(".sidebar-nav a .nav-icon", narrow, StringComparison.Ordinal);
+        Assert.Contains("display: none", narrow, StringComparison.Ordinal);
+        Assert.Contains(".sidebar-brand", phone320, StringComparison.Ordinal);
+        Assert.Contains("min-width: 0", phone320, StringComparison.Ordinal);
+    }
+
+    private static string CssSection(string css, string startMarker, string endMarker)
+    {
+        var start = css.IndexOf(startMarker, StringComparison.Ordinal);
+        var end = css.IndexOf(endMarker, start + startMarker.Length, StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, $"Could not find CSS section from {startMarker} to {endMarker}.");
+        return css[start..end];
     }
 
     private sealed class DashboardFixture : IAsyncDisposable
