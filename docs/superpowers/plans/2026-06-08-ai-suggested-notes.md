@@ -1,6 +1,9 @@
 # AI-Suggested Notes Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Historical implementation record — non-executable.** This dated plan is retained
+> for context only; do not treat unchecked steps as current agent or production
+> instructions. For deployment, backup, restore, rollback, or access operations, follow
+> the [current production runbook](../../../README.md#production-authentication-cutover-checklist).
 
 **Goal:** At sync, the existing Claude categorization call also returns a cleaned-up plain-English note; the Review page pre-fills note + category as editable "AI suggested" values and re-categorizes only when the note is actually edited.
 

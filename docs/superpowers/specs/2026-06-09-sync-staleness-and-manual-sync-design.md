@@ -1,7 +1,12 @@
 # Sync staleness visibility + manual "Sync now" — design
 
+> **Historical design record — non-executable.** This dated design is retained for
+> context only and does not define current production procedure. For deployment,
+> backup, restore, rollback, or access operations, follow the
+> [current production runbook](../../../README.md#production-authentication-cutover-checklist).
+
 **Date:** 2026-06-09
-**Status:** Approved (design); pending implementation plan
+**Status:** Historical design record; superseded by current implementation and runbook
 
 ## Problem
 

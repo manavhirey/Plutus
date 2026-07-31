@@ -1,6 +1,9 @@
 # Dashboard Insights + Transfer Exclusion Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Historical implementation record — non-executable.** This dated plan is retained
+> for context only; do not treat unchecked steps as current agent or production
+> instructions. For deployment, backup, restore, rollback, or access operations, follow
+> the [current production runbook](../../../README.md#production-authentication-cutover-checklist).
 
 **Goal:** Add Net Worth and Top-Category widgets to the dashboard, and stop double-counting credit-card bill payments by excluding payments to *synced* cards from spending (keeping BILT, which isn't connected).
 

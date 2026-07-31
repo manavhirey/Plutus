@@ -1,6 +1,9 @@
 # Sync Staleness Visibility + Manual "Sync now" Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Historical implementation record — non-executable.** This dated plan is retained
+> for context only; do not treat unchecked steps as current agent or production
+> instructions. For deployment, backup, restore, rollback, or access operations, follow
+> the [current production runbook](../../../README.md#production-authentication-cutover-checklist).
 
 **Goal:** Show per-account data staleness on the dashboard and add a manual "Sync now" button, so the user can see when a bank connection has stopped refreshing and force a sync on demand.
 

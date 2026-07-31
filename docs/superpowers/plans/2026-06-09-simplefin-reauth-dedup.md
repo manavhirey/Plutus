@@ -1,11 +1,9 @@
 # SimpleFIN Re-auth Dedup Implementation Plan
 
-> **Historical / superseded — non-executable.** Do not use this unchecked plan as an
-> agent instruction or deployment runbook. It records a prior re-auth reconciliation
-> effort. For any current production operation, follow the
-> [production authentication cutover checklist](../../../README.md#production-authentication-cutover-checklist),
-> which supersedes every imperative deployment, backup, restore, rollback, and access
-> instruction below.
+> **Historical implementation record — non-executable.** This dated plan is retained
+> for context only; do not treat unchecked steps as current agent or production
+> instructions. For deployment, backup, restore, rollback, or access operations, follow
+> the [current production runbook](../../../README.md#production-authentication-cutover-checklist).
 
 **Goal:** Stop SimpleFIN re-authentication from creating duplicate accounts/transactions (it re-mints account & transaction IDs), and heal the 5 duplicate accounts already in the live DB.
 

@@ -1,13 +1,12 @@
 # SimpleFIN re-auth: prevent & heal duplicate accounts/transactions — design
 
-> **Historical / superseded — do not execute as a deployment runbook.** This dated
-> design records a prior SimpleFIN re-auth reconciliation effort. Its approval and
-> pending-plan status are no longer active instructions. For any current deployment,
-> backup, restore, rollback, or authentication operation, follow the
-> [production authentication cutover checklist](../../../README.md#production-authentication-cutover-checklist).
+> **Historical design record — non-executable.** This dated design is retained for
+> context only and does not define current production procedure. For deployment,
+> backup, restore, rollback, or access operations, follow the
+> [current production runbook](../../../README.md#production-authentication-cutover-checklist).
 
 **Date:** 2026-06-09
-**Status:** Historical / superseded; non-executable
+**Status:** Historical design record; superseded by current implementation and runbook
 
 ## Problem
 

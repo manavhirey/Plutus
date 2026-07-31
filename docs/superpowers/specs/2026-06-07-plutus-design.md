@@ -1,7 +1,12 @@
 # Plutus — Personal Finance App: Design Spec
 
+> **Historical design record — non-executable.** This dated design is retained for
+> context only and does not define current production procedure. For deployment,
+> backup, restore, rollback, or access operations, follow the
+> [current production runbook](../../../README.md#production-authentication-cutover-checklist).
+
 **Date:** 2026-06-07
-**Status:** Approved design, pre-implementation
+**Status:** Historical design record; superseded by current implementation and runbook
 
 ## Overview
 

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Claims;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
@@ -46,6 +47,53 @@ public sealed class AuthenticationTests
             [$"{AdministratorSessionRecoveryCommand.Command}=unexpected"]));
         Assert.False(AdministratorSessionRecoveryCommand.IsRequested(
             [AdministratorSessionRecoveryCommand.Command, "unexpected"]));
+    }
+
+    [Fact]
+    public async Task Recovery_command_process_exits_before_normal_authentication_or_provider_startup()
+    {
+        var temporaryRoot = Path.Combine(Path.GetTempPath(), $"plutus-recovery-process-{Guid.NewGuid():N}");
+        var databasePath = Path.Combine(temporaryRoot, "plutus.db");
+        var keyPath = Path.Combine(temporaryRoot, "keys");
+        Directory.CreateDirectory(temporaryRoot);
+        Directory.CreateDirectory(keyPath);
+
+        try
+        {
+            var success = await RunRecoveryProcessAsync(
+                databasePath,
+                keyPath,
+                [AdministratorSessionRecoveryCommand.Command]);
+
+            Assert.Equal(0, success.ExitCode);
+            Assert.Equal(
+                "All Plutus administrator sessions were revoked. Start the authenticated service normally." + Environment.NewLine,
+                success.StandardOutput);
+            Assert.Empty(success.StandardError);
+            Assert.True(success.Elapsed < TimeSpan.FromSeconds(5));
+
+            var malformed = await RunRecoveryProcessAsync(
+                databasePath,
+                keyPath,
+                [AdministratorSessionRecoveryCommand.Command, "unexpected"]);
+            Assert.Equal(2, malformed.ExitCode);
+            Assert.Empty(malformed.StandardOutput);
+            Assert.Equal($"Use {AdministratorSessionRecoveryCommand.Command} by itself.{Environment.NewLine}", malformed.StandardError);
+
+            var failed = await RunRecoveryProcessAsync(
+                Path.Combine(temporaryRoot, "missing-directory", "plutus.db"),
+                keyPath,
+                [AdministratorSessionRecoveryCommand.Command]);
+            Assert.Equal(2, failed.ExitCode);
+            Assert.Empty(failed.StandardOutput);
+            Assert.Equal($"Session recovery failed; Plutus was not started.{Environment.NewLine}", failed.StandardError);
+            Assert.DoesNotContain(temporaryRoot, failed.StandardError, StringComparison.Ordinal);
+            Assert.DoesNotContain("SQLite", failed.StandardError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(temporaryRoot, recursive: true);
+        }
     }
 
     [Fact]
@@ -402,6 +450,47 @@ public sealed class AuthenticationTests
         Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static async Task<RecoveryProcessResult> RunRecoveryProcessAsync(
+        string databasePath,
+        string keyPath,
+        string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet",
+            WorkingDirectory = Path.GetDirectoryName(typeof(App).Assembly.Location)!,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add(typeof(App).Assembly.Location);
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        // A recovery operation must not depend on the normal web app's secrets.
+        startInfo.Environment.Remove(PlutusAuthentication.PasswordHashEnvironmentVariable);
+        startInfo.Environment.Remove("OPENAI_API_KEY");
+        startInfo.Environment.Remove("ANTHROPIC_API_KEY");
+        startInfo.Environment["Plutus__Database__Path"] = databasePath;
+        startInfo.Environment["Plutus__DataProtectionKeysPath"] = keyPath;
+
+        using var process = Process.Start(startInfo);
+        Assert.NotNull(process);
+        var stopwatch = Stopwatch.StartNew();
+        var outputTask = process!.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        stopwatch.Stop();
+
+        return new RecoveryProcessResult(
+            process.ExitCode,
+            await outputTask,
+            await errorTask,
+            stopwatch.Elapsed);
+    }
+
     private sealed class TestApplication : IAsyncDisposable
     {
         private readonly WebApplication _application;
@@ -661,6 +750,12 @@ public sealed class AuthenticationTests
     }
 
     private sealed record LoginToken(string Token, string Cookie);
+
+    private sealed record RecoveryProcessResult(
+        int ExitCode,
+        string StandardOutput,
+        string StandardError,
+        TimeSpan Elapsed);
 
     private sealed class CapturingLoggerProvider : ILoggerProvider
     {

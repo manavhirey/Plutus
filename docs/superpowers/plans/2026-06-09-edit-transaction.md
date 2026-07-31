@@ -1,6 +1,9 @@
 # Edit a Transaction (slide-over) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Historical implementation record — non-executable.** This dated plan is retained
+> for context only; do not treat unchecked steps as current agent or production
+> instructions. For deployment, backup, restore, rollback, or access operations, follow
+> the [current production runbook](../../../README.md#production-authentication-cutover-checklist).
 
 **Goal:** Let the user click any transaction on `/transactions` to open a right-side slide-over panel and edit its category and note (manual, no AI), persisting the change in place.
 

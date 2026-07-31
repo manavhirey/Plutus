@@ -198,7 +198,9 @@ database contents into this repository.
 
    This procedure needs no SQLite CLI and does not print, copy, or alter password
    hashes or Data Protection keys. It is a command, not a persistent environment
-   toggle, so subsequent restarts cannot silently revoke new sessions.
+   toggle, so subsequent restarts cannot silently revoke new sessions. The command
+   branch is regression-tested as a separate process with no administrator hash or
+   OpenAI key; it must exit from recovery before normal web-app startup validation.
 4. Confirm anonymous `/finance` access redirects to login; sign in over the public
    HTTPS URL; then log out and verify that a retained pre-logout cookie from another
    browser context is rejected. Also leave an authenticated interactive page open
