@@ -7,11 +7,12 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: Development
-      # Compose reads the gitignored project-root .env file; the app receives the key only in its process environment.
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       NUGET_PACKAGES: /root/.nuget/packages
     volumes:
-      - .:/workspace
+      # Mount only build inputs; never mount the project-root .env secret file.
+      - ./Plutus.slnx:/workspace/Plutus.slnx
+      - ./src:/workspace/src
+      - ./tests:/workspace/tests
       - plutus-nuget:/root/.nuget/packages
     ports:
       - "127.0.0.1:8080:8080"
