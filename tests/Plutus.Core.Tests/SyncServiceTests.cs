@@ -232,7 +232,7 @@ public sealed class SyncServiceTests : IDisposable
         Assert.Equal(transfer.Id, txn.CategoryId);
         Assert.True(txn.IsCategorized);
         Assert.True(txn.IsReviewed);
-        Assert.Equal(0, categorizer.Calls); // detection short-circuits the Claude call
+        Assert.Equal(0, categorizer.Calls); // detection short-circuits the model call
     }
 
     [Fact]

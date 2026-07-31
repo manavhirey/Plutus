@@ -20,8 +20,8 @@ services:
       plutus-init:
         condition: service_completed_successfully
     environment:
-      # Required: your Anthropic API key for categorization.
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Required: your OpenAI API key for categorization.
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       # Optional: headless first-time SimpleFIN provisioning (single-use setup token).
       # Claimed on startup if no connection exists yet; ignored afterwards.
       - Plutus__SimpleFin__SetupToken=${SIMPLEFIN_SETUP_TOKEN:-}
@@ -38,7 +38,7 @@ services:
       - Plutus__Backfill__MergeAccounts=${PLUTUS_BACKFILL_MERGE_ACCOUNTS:-false}
       # Optional overrides:
       # - Plutus__Sync__DailyTime=06:00
-      # - Plutus__Claude__Model=claude-haiku-4-5
+      # - Plutus__OpenAI__Model=gpt-5.6-luna
     volumes:
       - plutus-data:/data
 

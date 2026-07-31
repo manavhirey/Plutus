@@ -1,7 +1,7 @@
-using Anthropic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OpenAI.Responses;
 using Plutus.Core.Abstractions;
 using Plutus.Core.Categorization;
 using Plutus.Core.Data;
@@ -16,7 +16,7 @@ public static class DependencyInjection
 {
     /// <summary>
     /// Registers everything Plutus.Core provides: the DbContext, options, the SimpleFIN
-    /// typed client (with resilience), the Claude categorizer, and the sync services.
+    /// typed client (with resilience), the OpenAI categorizer, and the sync services.
     /// </summary>
     public static IServiceCollection AddPlutusCore(
         this IServiceCollection services,
@@ -30,28 +30,28 @@ public static class DependencyInjection
         // throw "a second operation was started on this context".
         services.AddDbContextFactory<PlutusDbContext>(options => options.UseSqlite(connectionString));
 
-        services.AddOptions<ClaudeOptions>().Bind(configuration.GetSection(ClaudeOptions.SectionName));
+        services.AddOptions<OpenAiOptions>().Bind(configuration.GetSection(OpenAiOptions.SectionName));
         services.AddOptions<SyncOptions>().Bind(configuration.GetSection(SyncOptions.SectionName));
 
         services.AddSingleton(TimeProvider.System);
 
-        // API key comes from ANTHROPIC_API_KEY (env / user-secrets); never from config or DB.
+        // API key comes from OPENAI_API_KEY (env / user-secrets); never from config or DB.
         // Fail fast at startup rather than letting every categorization fail silently later.
-        var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                "ANTHROPIC_API_KEY is not set. Plutus needs it to categorize transactions — " +
+                "OPENAI_API_KEY is not set. Plutus needs it to categorize transactions — " +
                 "provide it via environment variable or user-secrets before starting the app.");
         }
 
-        services.AddSingleton(_ => new AnthropicClient { ApiKey = apiKey });
+        services.AddSingleton(_ => new ResponsesClient(apiKey));
 
         services.AddHttpClient<ISimpleFinClient, SimpleFinClient>()
             .AddStandardResilienceHandler();
 
         services.AddSingleton<IConnectionProtector, DataProtectionConnectionProtector>();
-        services.AddScoped<ICategorizer, ClaudeCategorizer>();
+        services.AddScoped<ICategorizer, OpenAiCategorizer>();
         services.AddScoped<ISimpleFinConnectionService, SimpleFinConnectionService>();
         services.AddScoped<ISyncService, SyncService>();
         services.AddScoped<ISpendingReport, SpendingReport>();

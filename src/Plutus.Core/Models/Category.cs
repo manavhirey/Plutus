@@ -2,7 +2,7 @@ namespace Plutus.Core.Models;
 
 /// <summary>
 /// A spending category. Seeded with a starter set and editable in the UI.
-/// The set of category names is what constrains Claude's categorization.
+/// The set of category names constrains model categorization.
 /// </summary>
 public class Category
 {

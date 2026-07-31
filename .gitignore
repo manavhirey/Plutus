@@ -31,5 +31,5 @@ secrets.json
 .superpowers/
 .remember/
 
-# Claude Code transient cron lock
+# Agent tool transient cron lock
 .claude/scheduled_tasks.lock

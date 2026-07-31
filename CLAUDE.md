@@ -1,7 +1,7 @@
-# Plutus — Claude Code guide
+# Plutus — development guide
 
 Single-user, self-hosted personal finance app (.NET 10, Blazor): connects to a bank
-via SimpleFIN Bridge, pulls daily transactions, categorizes them with the Claude API.
+via SimpleFIN Bridge, pulls daily transactions, categorizes them with the OpenAI API.
 Full design: `docs/superpowers/specs/2026-06-07-plutus-design.md`. User-facing
 build/run/config docs live in `README.md` — this file covers only what's non-obvious.
 
@@ -17,7 +17,7 @@ build/run/config docs live in `README.md` — this file covers only what's non-o
 export PATH="$HOME/.dotnet:$PATH"
 dotnet build                                # whole solution
 dotnet test                                 # xUnit (tests/Plutus.Core.Tests)
-dotnet run --project src/Plutus.Web         # local dev; needs ANTHROPIC_API_KEY in env
+dotnet run --project src/Plutus.Web         # local dev; needs OPENAI_API_KEY in env
 
 dotnet tool restore                         # restore the dotnet-ef local tool first
 dotnet ef migrations add <Name> --project src/Plutus.Core
@@ -25,14 +25,14 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
 
 ## Architecture
 - `src/Plutus.Core` — domain models, EF Core (SQLite) + migrations, SimpleFIN client,
-  Claude categorizer, sync service; wired in `DependencyInjection.cs`.
+  OpenAI categorizer, sync service; wired in `DependencyInjection.cs`.
 - `src/Plutus.Web` — Blazor Web App (InteractiveServer), pages in `Components/Pages`,
   `DailySyncScheduler` background service.
-- Categorization calls the Claude API with **structured outputs** (fixed category enum);
-  default model `claude-opus-4-8` (`Plutus:Claude:Model`).
+- Categorization calls the OpenAI Responses API with **structured outputs** (fixed category enum);
+  default model `gpt-5.6-luna` (`Plutus:OpenAI:Model`).
 
 ## Security / secrets
-- `ANTHROPIC_API_KEY` is the only secret — from env or the gitignored `.env`.
+- `OPENAI_API_KEY` is the only model secret — from env or the gitignored `.env`.
   **Never commit `.env`** or put the key in config/DB.
 - The SimpleFIN access URL is stored **encrypted in the DB** via ASP.NET Data Protection;
   the key ring lives on the `plutus-data` volume — lose it and the connection can't decrypt.

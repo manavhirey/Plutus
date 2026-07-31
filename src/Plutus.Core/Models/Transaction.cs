@@ -29,7 +29,7 @@ public class Transaction
 
     public Category? Category { get; set; }
 
-    /// <summary>True once Claude (or a manual override) has assigned a category.</summary>
+    /// <summary>True once the model (or a manual override) has assigned a category.</summary>
     public bool IsCategorized { get; set; }
 
     /// <summary>True once the user has reviewed this transaction on the /review page.</summary>
