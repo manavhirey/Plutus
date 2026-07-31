@@ -26,15 +26,18 @@ packages are retained in the `plutus-nuget` Docker volume.
 # Restore, build, and run the complete test suite
 docker compose -f docker-compose.dev.yml run --rm dotnet
 
+# The app requires an API key; export it before starting hot reload.
+export ANTHROPIC_API_KEY=...
+
 # Start the app with hot reload at http://localhost:8080
 docker compose -f docker-compose.dev.yml run --rm --service-ports dotnet \
   dotnet watch --project src/Plutus.Web run --no-launch-profile
 ```
 
-If `ANTHROPIC_API_KEY` is exported in your shell before starting the app, Docker
-passes it into the development container for AI categorization; it is never
-written to a project file. The app's local SQLite database and data-protection
-keys are written to the working tree and are ignored by Git.
+The test command does not need an API key. Docker passes the exported key into
+the development container for the app, but it is never written to a project
+file. The app's local SQLite database and data-protection keys are written to
+the working tree and are ignored by Git.
 
 ## Run locally without Docker
 
