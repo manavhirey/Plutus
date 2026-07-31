@@ -1,7 +1,7 @@
 # Dashboard action center — implementation handoff
 
 **Date:** 2026-07-31
-**Status:** Approved plan; implementation not started
+**Status:** Approved plan; implementation not started; independent-review revisions incorporated
 **Reference design:** [`../specs/2026-07-31-dashboard-action-center-design.md`](../specs/2026-07-31-dashboard-action-center-design.md)
 
 ## Status reconciliation and precedence
@@ -28,7 +28,9 @@ Read the current design, prior July plan, and `CLAUDE.md` before each affected t
 ## Dependency sequence
 
 ```text
-Quick visual pass (presentation-only; independent) ──────────────┐
+Quick visual pass (conservative copy/a11y only; independent) ────┐
+                                                                    │
+finance zone validation/calendar ──→ scheduler-local behavior ────┤
                                                                     │
 sync truth: outcomes → classification/recovery → coordinator → UI ┤
                                                                     ├─ dashboard read model
@@ -41,40 +43,42 @@ review UI + final corrections → confirmed reports/finance time ───┤
                                                    accessibility, rollout, release
 ```
 
-Do not ship a full state assertion or confirmed-spending label before its projection can prove it. The quick pass is independent only because it conservatively rearranges existing data.
+Do not ship a full state assertion, Review-first CTA, or confirmed-spending label before its projection can prove it. The quick pass is independent only because it leaves primary-action precedence untouched.
 
 ## Phase 0 — quick visual pass (safe now)
 
-**Purpose:** Improve hierarchy/navigation without changing sync, enrichment, reporting, persistence, API, or data semantics.
+**Purpose:** Improve conservative copy, spacing, navigation, and control accessibility without changing sync, enrichment, reporting, persistence, API, data semantics, or primary-action precedence.
 
-**Allowed:** Presentation, CSS, layout, link placement, accessible labels, and wording accurate for current data. **Forbidden:** New health classification, changed report predicate, confirmed-total claim, model call, worker, migration, or a pending-is-caught-up statement. This phase must not call legacy `Success` “Healthy” or current spending “Confirmed.”
+**Allowed:** Presentation, CSS, layout spacing, non-semantic navigation order, accessible labels, and wording accurate for current data. **Forbidden:** New health classification, state selector, changed report predicate, confirmed-total claim, model call, worker, migration, or a pending-is-caught-up statement. This phase must not call legacy `Success` “Healthy” or current spending “Confirmed.” It must not make Review sole or first CTA: current data cannot prove that a manual sync is not running, a failure is unresolved, or a connection is absent.
 
 ### Exact implementation checklist
 
-- [ ] In `Home.razor`, put existing review content before sync, spending, net worth, and accounts. With legacy unreviewed rows, give it the sole prominent “Review transactions” route and neutral text “Transactions awaiting review.”
-- [ ] With legacy review count zero, replace “All clear” with “No transactions currently awaiting review.” Do not say caught up because legacy state cannot distinguish pending/processing.
-- [ ] Reword current sync card as **Latest sync attempt**. Preserve literal Success/Failed and timestamp; never label Success Healthy. Retain Settings/setup route.
+- [ ] Keep current primary-card/action parity. Do not move Review ahead of Sync as a primary action and do not alter the conditions under which the legacy manual-sync control is available. Improve spacing, heading hierarchy, and DOM/keyboard order only within the existing neutral card layout.
+- [ ] Give Review neutral current-state wording: “Transactions awaiting review” for a nonzero legacy count; “No transactions currently awaiting review” for zero. The Review page's empty state uses “No transactions currently awaiting review” rather than “All caught up.” Neither screen says caught up or all clear.
+- [ ] Reword sync card as **Latest sync attempt** and preserve literal `Success`/`Failed` plus timestamp. Always retain the existing Settings/setup route and manual-sync affordance. `Success` is not Healthy; `Failed` is not silently buried behind Review.
 - [ ] Reword chart/summary as **Spending by category (current categorization)** or equivalent. Do not call it reviewed/finalized/confirmed. Preserve query and click behavior.
-- [ ] Move net worth/accounts below review/sync/spending as secondary content. Retain values and currency on every account; do not strengthen aggregate claims or change calculation.
+- [ ] Treat existing aggregate widgets as currency-sensitive presentation. If all currently displayed accounts have exactly one known ISO currency, append that ISO currency to each spending/net-worth/top-category aggregate and chart axis. If zero or more than one currency is present, omit/hide net-worth, top-category, and spending chart/aggregate cards rather than combining them; individual account balances always include ISO currency. Do not add FX or alter report data.
 - [ ] Keep Review immediately after Dashboard. Do not add a dynamic count badge until it has one shared `ReviewQueueSummary`; an ad hoc layout query or inaccurate badge is forbidden.
 - [ ] Replace/enlarge the icon-only sync affordance or provide visible label, focus, busy text, disabled reason, and 44×44 target. Do not alter invocation/coordination.
-- [ ] Use existing CSS tokens/responsive grid. Review content is first in DOM/tab order; no horizontal scroll at 320px.
-- [ ] Add focused render/UI checks only for wording, route, DOM order, keyboard name, and responsive hooks. Do not change legacy sync/report assertions.
-- [ ] Manually check no connection, zero/nonzero legacy review rows, latest Success, latest Failed, and 320px with sanitized/disposable data.
+- [ ] Use existing CSS tokens/responsive grid; no horizontal scroll at 320px. Do not claim DOM-first Review ordering as action precedence while health is unknown.
+- [ ] Add `bunit` to `tests/Plutus.Web.Tests` and create `DashboardPresentationTests` using a `TestContext` with a deterministic `TimeProvider`, disposable SQLite `IDbContextFactory`, and fake `ISyncService`. Build a real `AdministratorSessionGuard` from the existing `AdministratorSessionStore`, `AdministratorAuthenticationState`, `AdministratorSessionOperationCoordinator`, and a test `AuthenticationStateProvider`; seed a non-expired `AdministratorSession` and matching-fingerprint `ClaimsPrincipal` in the fixture. Seed only invented account/category/transaction names. Render Home/Review/MainLayout through this authenticated fixture; do not bypass authorization by rendering anonymous services.
+- [ ] Automatic assertions cover exact conservative copy, literal Success/Failed (and absence of Healthy/Confirmed/Caught up), retained Settings/manual-sync route, zero/nonzero Review copy, one-/multi-/zero-currency aggregate visibility and ISO labels, accessible control names/44px hooks, DOM structure, and responsive CSS hooks. Do not change legacy sync/report assertions.
+- [ ] Manual visual QA is separate from automated DOM tests: authenticated local fixture at 320px, 768px, and desktop widths; check wrapping, focus visibility, no horizontal scroll, and no sensitive data in screenshots/output. Exercise no connection, zero/nonzero legacy review rows, latest Success, latest Failed, and manual-sync control.
 
-**Exit:** Review-first, keyboard/mobile improvement with no semantic overclaim. It can deploy independently after normal tests/review.
+**Exit:** Conservative, more usable presentation with no implied priority/health/currency claim. The true action hierarchy is deferred to tested `DashboardState`. It can deploy independently after normal tests/review.
 
-## Phase 1 — truthful sync-health foundation
+## Phase 1 — finance boundary and truthful sync-health foundation
 
 Implement July 30 Milestone 0 before full dashboard health use:
 
-1. Add Success/Degraded/Failed/Skipped, trigger/duration/window, safe reason codes, last-healthy watermark, completed cursor, account observations, and recovery metadata. Test EF migration from pre-feature SQLite.
-2. Classify after logical account matching. Warnings, missing active expected accounts, and stale balance data are Degraded; partial data ingests; degraded/failed/skipped never advance healthy watermark. Bound recovery and require explicit backfill after window.
-3. Create one single-replica coordinator for manual, scheduled, startup, reconnect, and recovery; report contention rather than overlapping SQLite writes. Add bounded transient retry and deterministic `America/New_York` scheduler/local-date behavior.
-4. Put reconnect validation/replacement through it. Preserve known-good credential on invalid replacement; safely swap a valid-but-degraded one and recover.
-5. Add `SyncHealthSummary`; update Settings then Home for Not connected/Attention/Failed/syncing, posted-only semantics, and resolution routes.
+1. First add validated `Plutus:Finance:TimeZoneId` and injectable finance calendar/clock, default `America/New_York`. Invalid/missing/unsupported configuration fails closed at startup before `DailySyncScheduler` initializes; it never falls back to host local time. This boundary is implemented now and consumed across reports/pages in Phase 4.
+2. Add Success/Degraded/Failed/Skipped, trigger/duration/window, safe reason codes, last-healthy watermark, completed cursor, account observations, and recovery metadata. Test EF migration from pre-feature SQLite.
+3. Classify after logical account matching. Warnings, missing active expected accounts, and stale balance data are Degraded; partial data ingests; degraded/failed/skipped never advance healthy watermark. Bound recovery and require explicit backfill after window.
+4. Create one single-replica coordinator for manual, scheduled, startup, reconnect, and recovery; report contention rather than overlapping SQLite writes. Add bounded transient retry and use the already validated finance calendar for deterministic scheduler-local date/DST behavior.
+5. Put reconnect validation/replacement through it. Every user-initiated manual sync and reconnect acquires `AdministratorSessionGuard` before I/O and holds its lease across coordinator calls and database commit. Preserve known-good credential on invalid replacement; safely swap a valid-but-degraded one and recover.
+6. Add `SyncHealthSummary`; update Settings then Home for Not connected/Attention/Failed/syncing, posted-only semantics, and resolution routes.
 
-**Tests:** migration/state fixture; first/reminted accounts; warning/missing/stale/retired/malformed/persistence; recovery/backfill boundary; coordinator collision/retry/auth; DST; health projection state coverage.
+**Tests:** invalid zone fails before scheduler startup, valid IANA zone/DST/host-zone-independent calendar behavior; migration/state fixture; first/reminted accounts; warning/missing/stale/retired/malformed/persistence; recovery/backfill boundary; coordinator collision/retry/auth; manual sync/reconnect logout-or-expiry cancellation during I/O and immediately before commit; health projection state coverage.
 
 **Exit:** Home consumes explicit health projection; no `lastRun.Status == Success` health inference.
 
@@ -83,33 +87,34 @@ Implement July 30 Milestone 0 before full dashboard health use:
 Implement July 30 Milestone 1:
 
 1. Add proposal/final fields, `EnrichmentStatus`, retry/error/attempt, CAS lease/version, and queue indexes. Implement Pending/Processing/Ready/Failed/Finalized/SkippedTransfer and exact conservative legacy migration.
-2. Add `ITransactionEnricher` with no-key/unavailable mode. Provider migration is done: do not modify or re-deploy it. Payload/log tests prove raw description is not logged and identifiers are omitted by default.
-3. Remove model work from bank ingest with durable bounded worker; new non-transfer rows persist Pending. Require leases, retry, stale-lease recovery, separate-context tests, and finalization-wins.
+2. Add `ITransactionEnricher` with no-key/unavailable mode and the spec's pure `EnrichmentRequestBuilder`/`BoundedEnrichmentRequest` boundary. Provider migration is done: do not modify or re-deploy it. Only this bounded request type may receive raw description. Enforce scalar/UTF-8 description limits, category count/name/schema limits, total request budget, safe rune-boundary truncation, and bounded `CategoryInputTooLarge`/unavailable outcomes; do not silently drop category options.
+3. Remove model work from bank ingest with durable bounded worker; new non-transfer rows persist Pending. Worker is explicitly outside user-session coordination and uses hosted-service cancellation plus durable leases. Require retry, stale-lease recovery, separate-context tests, and finalization-wins.
 4. Add `ReviewQueueSummary` from status. Define manual-recoverable failure and restrict future badge to Ready + those failures.
 
-**Tests:** actual legacy upgrade; migration/state matrix; raw immutability/transfers; unavailable startup; offline/retry/lease/restart worker; two-context race; prompt/log capture; queue summary.
+**Tests:** actual legacy upgrade; migration/state matrix; raw immutability/transfers; exact/multibyte description limits; safe truncation; category/input total-budget overflow; oversize/malicious instruction-like merchant text; only-bounded-request provider path; unavailable startup; offline/retry/lease/restart worker; two-context race; prompt/log/error capture; queue summary.
 
 **Exit:** review state is meaningful beyond `IsReviewed`; bank sync works without the model.
 
 ## Phase 3 — review and correction integrity
 
 1. Replace `Review.razor` bind-time `RefineFromNoteAsync` with guided proposal review. Unchanged approval makes zero model calls. Edited explicit submit makes at most one, exposes busy state, and leaves a recoverable failure unreviewed.
-2. Add manual category finalization, including intentional null-category finalization for Confirmed Uncategorized.
-3. Update history/edit panel to show `FinalDescription ?? Description`, raw source read-only, and send unfinalized edits to Review.
-4. Add final correction command with concurrency token/CAS. It writes description/category atomically only after explicit model success or manual choice; conflict reloads, failures leave final data untouched, typing calls no model.
+2. Add server-side `ReviewQueuePage`: fixed maximum 25, stable `ActionableAt DESC, TransactionId DESC` keyset ordering, opaque cursor/snapshot marker, separate aggregate counts, and load-more. Use accessible current/backlog/new-work messages; never materialize an unbounded queue in the circuit.
+3. Add manual category finalization, including intentional null-category finalization for Confirmed Uncategorized. Approval/finalization, retry, manual category, and final correction all acquire and hold `AdministratorSessionGuard` operation lease through external I/O and database commit.
+4. Update history/edit panel to show `FinalDescription ?? Description`, raw source read-only, and send unfinalized edits to Review.
+5. Add final correction command with concurrency token/CAS. It writes description/category atomically only after explicit model success or manual choice; conflict reloads, failures leave final data untouched, typing calls no model.
 
-**Tests:** unchanged approval zero calls; edited submit one; rapid submit no duplicate finalization; failure persists edit; manual finalization; provenance; final correction success/manual/failure/conflict; keyboard/busy/error flow.
+**Tests:** unchanged approval zero calls; edited submit one; rapid submit no duplicate finalization; failure persists edit; manual finalization; provenance; final correction success/manual/failure/conflict; each user command cancelled by logout/expiry during I/O and before commit; server page size/order/cursor rejection; concurrent worker transition/other-tab finalization produces no duplicate/omitted rendered IDs and honest summary; keyboard/busy/error/backlog flow.
 
 **Exit:** Finalized has trustworthy meaning; history cannot create a reviewed description/category mismatch.
 
 ## Phase 4 — confirmed reports and finance calendar
 
-1. Add validated finance options/calendar with `America/New_York` default. Replace finance uses of `DateTime.Now`/`ToLocalTime()` in Home, Review, Transactions, Settings/scheduler display, and reports. Keep UTC persistence.
-2. Replace `SpendingReport` semantics with named confirmed-spending projection: finalized/reviewed, non-excluded, finance-zone period, final null bucket as Confirmed Uncategorized, and compatible Transactions filter.
+1. Consume the validated finance calendar introduced in Phase 1 across Home, Review, Transactions, Settings/scheduler display, and reports; replace finance uses of `DateTime.Now`/`ToLocalTime()` while retaining UTC persistence.
+2. Replace `SpendingReport` semantics with named confirmed-spending projection: finalized/reviewed, non-excluded, finance-zone period, final null bucket as Confirmed Uncategorized, grouped by account currency, and compatible currency-plus-category Transactions filter. A mixed-currency month renders separate currency buckets or no aggregate; no displayed or API total crosses currencies.
 3. Replace unconditional net-worth contract with currency-safe summary. Preserve per-account amount/freshness; no FX conversion in scope.
 4. Add dashboard composer taking health, queue, confirmed spending, and accounts/net-worth and selecting one primary action from the approved matrix. Pages must not duplicate precedence rules.
 
-**Tests:** all finalization/exclusion types; final null category; drill-down parity; month boundaries/DST/host-zone independence/invalid config; equal/mixed currencies; every primary-action precedence and safe empty state.
+**Tests:** all finalization/exclusion types; final null category; currency grouping/drill-down parity; month boundaries/DST/host-zone independence using Phase 1 validation; equal/mixed/zero currencies; every primary-action precedence and safe empty state.
 
 **Exit:** labels, totals, dates, and action selection have shared explicit semantics.
 
@@ -118,9 +123,10 @@ Implement July 30 Milestone 1:
 1. Implement action-centre components from `DashboardState`: untrusted health first, then actionable review, processing non-success state, caught up last.
 2. Add Review badge from `ReviewQueueSummary`; no layout-level ad hoc query. Route panels/drill-down to compatible Review, Settings, Transactions state.
 3. Render confirmed spending plus text-equivalent breakdown. Health is compact only when trusted; accounts/net worth stay secondary/currency-safe.
-4. Complete design accessibility/responsive criteria: semantic headings, focus/live/busy behavior, text-plus-colour status, 44px controls, chart alternative, 320px single column, reduced motion, wrapping.
+4. Implement scoped `ICircuitRefreshCoordinator`/`IStateChangeSignal` exactly as specified: cancellable `PeriodicTimer`, subscriptions, coalesced serialized named loads, monotonic stale-result suppression, `Applied`/`NoChange`/`Busy`/`Cancelled`/`Failed` outcomes, and `IAsyncDisposable` cleanup. Home/MainLayout share dashboard/queue snapshot; Review uses it plus paged queue loads. Automatic refresh preserves keyed-row/editor focus and uses only polite status messages.
+5. Complete design accessibility/responsive criteria: semantic headings, focus/live/busy behavior, text-plus-colour status, 44px controls, chart alternative, 320px single column, reduced motion, wrapping.
 
-**Tests:** component/render all matrix states; badge; keyboard routes; accessibility regression; 320px/mobile/desktop visual checks for loading/error/disconnected/degraded/syncing/processing/long queue/caught-up/mixed currency, using sanitized fixtures.
+**Tests:** component/render all matrix states; badge; coordinator timer/signal coalescing/serialization/stale suppression/disposal/no callback after disposal/outcome mapping/shared snapshot/focus preservation; keyboard routes; accessibility regression; 320px/mobile/desktop visual checks for loading/error/disconnected/degraded/syncing/processing/long queue/caught-up/mixed currency, using sanitized fixtures.
 
 ## Verification, rollout, and metrics
 
