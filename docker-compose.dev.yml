@@ -1,0 +1,18 @@
+name: plutus-dev
+
+services:
+  dotnet:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    working_dir: /workspace
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      NUGET_PACKAGES: /root/.nuget/packages
+    volumes:
+      - .:/workspace
+      - plutus-nuget:/root/.nuget/packages
+    ports:
+      - "8080:8080"
+    command: dotnet test Plutus.slnx
+
+volumes:
+  plutus-nuget:

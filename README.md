@@ -16,7 +16,26 @@ src/Plutus.Web    Blazor Web App (InteractiveServer), pages, daily sync schedule
 tests/            xUnit tests for Plutus.Core
 ```
 
-## Run locally
+## Develop with Docker
+
+All development commands can run in the .NET 10 SDK container; no .NET SDK is
+needed on the host. The source tree is mounted into the container and NuGet
+packages are retained in the `plutus-nuget` Docker volume.
+
+```bash
+# Restore, build, and run the complete test suite
+docker compose -f docker-compose.dev.yml run --rm dotnet
+
+# Start the app with hot reload at http://localhost:8080
+docker compose -f docker-compose.dev.yml run --rm --service-ports dotnet \
+  dotnet watch --project src/Plutus.Web run
+```
+
+Set `ANTHROPIC_API_KEY` in your shell before starting the app if you want AI
+categorization available. The app's local SQLite database and data-protection
+keys are written to the working tree and are ignored by Git.
+
+## Run locally without Docker
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -63,5 +82,5 @@ listens on port 8080 inside the container.
 ## Test
 
 ```bash
-dotnet test
+docker compose -f docker-compose.dev.yml run --rm dotnet
 ```
