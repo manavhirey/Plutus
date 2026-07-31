@@ -72,6 +72,10 @@ else
                     <span class="status-dot @(ok ? "ok" : "bad")" aria-hidden="true"></span><span>@_lastRun.Status</span>
                 </div>
                 <span id="sync-status-detail" class="muted">@_lastRun.RanAt.ToLocalTime().ToString("MMM d · h:mm tt") · @_lastRun.NewTransactionCount new</span>
+                @if (!ok)
+                {
+                    <a href="settings" class="inline-action sync-settings-link">View sync settings</a>
+                }
             }
         </section>
 
@@ -127,12 +131,25 @@ else
                                          CategoryProperty="Name"
                                          ValueProperty="Total"
                                          Fills="@_fills"
-                                         Title="Spending" />
+                                         Title="Spending">
+                            <TooltipTemplate Context="data">
+                                @if (data is CategorySpend row)
+                                {
+                                    <span>@row.Name: @CurrencyAmountFormatter.Format(row.Total, _aggregateCurrency)</span>
+                                }
+                            </TooltipTemplate>
+                        </RadzenBarSeries>
                         <RadzenValueAxis Formatter="@FormatAsCurrency">
                             <RadzenAxisTitle Text="@($"Amount ({_aggregateCurrency})")" />
                         </RadzenValueAxis>
                         <RadzenLegend Visible="false" />
                     </RadzenChart>
+                    <ul class="chart-text-fallback" aria-label="Spending by category values">
+                        @foreach (var category in _spend)
+                        {
+                            <li>@category.Name: @CurrencyAmountFormatter.Format(category.Total, _aggregateCurrency)</li>
+                        }
+                    </ul>
                 }
             </div>
         </section>

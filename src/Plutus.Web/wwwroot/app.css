@@ -154,6 +154,11 @@ button { font-family: inherit; }
     flex: 1;
 }
 
+.sidebar-signout {
+    margin: auto 0 0;
+    padding: 0 0.75rem;
+}
+
 .sidebar-nav a {
     display: flex;
     align-items: center;
@@ -374,6 +379,23 @@ h2 {
 
 .dashboard-spending-card {
     overflow: hidden;
+}
+
+.chart-text-fallback {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.sync-settings-link {
+    display: inline-block;
+    margin-top: 0.4rem;
 }
 
 .inline-action {
@@ -1029,15 +1051,19 @@ h1:focus { outline: none; }
         width: 100%;
         min-height: auto;
         position: sticky;
-        flex-direction: row;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: 44px 44px;
         align-items: center;
-        padding: 0 1rem;
-        height: 56px;
+        padding: 0.5rem 1rem;
+        height: auto;
         border-right: none;
         border-bottom: 1px solid rgba(255, 255, 255, .10);
     }
 
     .sidebar-brand {
+        grid-column: 1;
+        grid-row: 1;
         padding: 0;
         border-bottom: none;
     }
@@ -1051,20 +1077,36 @@ h1:focus { outline: none; }
     }
 
     .sidebar-nav {
-        flex-direction: row;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         padding: 0;
         gap: 0;
-        flex: 1;
-        justify-content: flex-end;
+        width: 100%;
     }
 
     .sidebar-nav a {
-        padding: 0.45rem 0.65rem;
+        justify-content: center;
+        min-width: 0;
+        padding: 0.45rem 0.35rem;
         font-size: 0.82rem;
     }
 
     .sidebar-nav a.active::before {
         display: none;
+    }
+
+    .sidebar-signout {
+        grid-column: 2;
+        grid-row: 1;
+        margin: 0;
+        padding: 0;
+    }
+
+    .sidebar-signout .nav-link-button {
+        padding-inline: 0.55rem;
+        text-align: center;
     }
 
     .content {
@@ -1076,21 +1118,18 @@ h1:focus { outline: none; }
 /* ── Mobile: narrow viewport (≤ 430px) ───────────────────── */
 @media (max-width: 430px) {
 
-    /* ── Nav: icon-only to save horizontal space ── */
+    /* ── Nav: retain text labels in a four-column second row ── */
     .sidebar-nav a {
-        min-width: 44px;
         min-height: 44px;
-        padding: 0.45rem 0.55rem;
-        font-size: 0;          /* hide text */
-        gap: 0;
+        padding: 0.35rem 0.15rem;
+        font-size: 0.68rem;
+        gap: 0.25rem;
+        white-space: nowrap;
     }
 
-    /* Keep icons visible */
+    /* Full labels remain reachable at 320px; icons yield the constrained width. */
     .sidebar-nav a .nav-icon {
-        width: 20px;
-        height: 20px;
-        opacity: 1;
-        font-size: initial;    /* reset for SVG */
+        display: none;
     }
 
     /* Keep review badge visible */
@@ -1314,6 +1353,18 @@ h1:focus { outline: none; }
 }
 
 @media (max-width: 320px) {
+    .sidebar {
+        padding-inline: 0.5rem;
+    }
+
+    .sidebar-brand {
+        min-width: 0;
+    }
+
+    .sidebar-wordmark {
+        max-width: 92px;
+    }
+
     .content {
         padding-inline: 0.75rem;
     }

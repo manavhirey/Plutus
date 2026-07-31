@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.JSInterop;
 using Plutus.Core.Categorization;
 using Plutus.Core.Data;
 using Plutus.Core.Models;
@@ -16,6 +18,7 @@ using Plutus.Web.Authentication;
 using Plutus.Web.Components.Layout;
 using Plutus.Web.Components.Pages;
 using Radzen;
+using Radzen.Blazor;
 
 namespace Plutus.Web.Tests;
 
@@ -94,6 +97,60 @@ public sealed class DashboardPresentationTests
     }
 
     [Fact]
+    public async Task Dashboard_chart_uses_iso_axis_tooltip_fallback_and_existing_category_route()
+    {
+        await using var fixture = await DashboardFixture.CreateAsync(
+            [DashboardFixture.Account("EUR")],
+            needsReview: 0,
+            hasSpending: true);
+        var cut = fixture.Context.RenderComponent<Home>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Fixture category: 100.00 EUR", cut.Markup, StringComparison.Ordinal);
+            Assert.NotNull(cut.FindComponent<RadzenBarSeries<CategorySpend>>().Instance.TooltipTemplate);
+        });
+
+        var axis = cut.FindComponent<RadzenValueAxis>().Instance;
+        Assert.Equal("100.00 EUR", axis.Formatter!(100m));
+
+        await cut.InvokeAsync(() => cut.FindComponent<RadzenChart>().Instance.SeriesClick.InvokeAsync(new SeriesClickEventArgs
+        {
+            Data = new CategorySpend(7, "Fixture category", "#123456", 100m),
+        }));
+        Assert.EndsWith("/transactions?category=7", fixture.Context.Services.GetRequiredService<NavigationManager>().Uri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Failed_sync_retains_literal_status_settings_route_and_manual_sync_busy_semantics()
+    {
+        await using var fixture = await DashboardFixture.CreateAsync(
+            [DashboardFixture.Account("EUR")],
+            needsReview: 0,
+            syncStatus: SyncStatus.Failed,
+            hasConnection: true,
+            blockSync: true);
+        var cut = fixture.Context.RenderComponent<Home>();
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Failed", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("View sync settings", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("Healthy", cut.Markup, StringComparison.Ordinal);
+        });
+        Assert.Equal("settings", cut.Find("a.sync-settings-link").GetAttribute("href"));
+
+        cut.Find("button.sync-now-btn").Click();
+        await fixture.SyncService.WaitUntilStartedAsync();
+        cut.WaitForAssertion(() =>
+        {
+            var syncButton = cut.Find("button.sync-now-btn");
+            Assert.True(syncButton.HasAttribute("disabled"));
+            Assert.Contains("Syncing", syncButton.TextContent, StringComparison.Ordinal);
+        });
+        fixture.SyncService.Complete();
+    }
+
+    [Fact]
     public async Task Review_empty_state_and_navigation_are_conservative_and_accessibly_named()
     {
         await using var fixture = await DashboardFixture.CreateAsync(Array.Empty<Account>(), needsReview: 0);
@@ -116,9 +173,47 @@ public sealed class DashboardPresentationTests
     public void Currency_formatter_requires_an_uppercase_iso_code_and_never_uses_a_symbol()
     {
         Assert.True(CurrencyAmountFormatter.IsValidIso4217Code("EUR"));
+        Assert.True(CurrencyAmountFormatter.IsValidIso4217Code("XCG"));
+        Assert.True(CurrencyAmountFormatter.IsValidIso4217Code("ZWG"));
         Assert.False(CurrencyAmountFormatter.IsValidIso4217Code("eur"));
+        Assert.False(CurrencyAmountFormatter.IsValidIso4217Code("HRK"));
+        Assert.False(CurrencyAmountFormatter.IsValidIso4217Code("ZWL"));
+        Assert.False(CurrencyAmountFormatter.IsValidIso4217Code(""));
+        Assert.False(CurrencyAmountFormatter.IsValidIso4217Code(" EUR "));
+        Assert.False(CurrencyAmountFormatter.IsValidIso4217Code("QQQ"));
         Assert.Equal("100.00 EUR", CurrencyAmountFormatter.Format(100m, "EUR"));
         Assert.Equal("100.00 USD", CurrencyAmountFormatter.Format(100m, "USD"));
+    }
+
+    [Fact]
+    public async Task Dashboard_hides_aggregates_for_blank_unknown_and_same_invalid_currency_codes()
+    {
+        foreach (var accounts in new[]
+                 {
+                     new[] { DashboardFixture.Account(""), DashboardFixture.Account("", "second") },
+                     new[] { DashboardFixture.Account("QQQ"), DashboardFixture.Account("QQQ", "second") },
+                     new[] { DashboardFixture.Account("EUR"), DashboardFixture.Account("QQQ", "second") },
+                 })
+        {
+            await using var fixture = await DashboardFixture.CreateAsync(accounts, needsReview: 0);
+            var cut = fixture.Context.RenderComponent<Home>();
+            cut.WaitForAssertion(() => Assert.DoesNotContain("Net worth", cut.Markup, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
+    public void Responsive_navigation_and_motion_css_keep_a_320px_two_row_layout_with_focus_hooks()
+    {
+        var projectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+        var cssPath = Path.Combine(projectRoot, "src", "Plutus.Web", "wwwroot", "app.css");
+        var css = File.ReadAllText(cssPath);
+
+        Assert.Contains(":focus-visible", css, StringComparison.Ordinal);
+        Assert.Contains("prefers-reduced-motion: reduce", css, StringComparison.Ordinal);
+        Assert.Contains("grid-template-rows: 44px 44px", css, StringComparison.Ordinal);
+        Assert.Contains("grid-template-columns: repeat(4, minmax(0, 1fr))", css, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width: 320px)", css, StringComparison.Ordinal);
+        Assert.Contains(".sidebar-nav a .nav-icon", css, StringComparison.Ordinal);
     }
 
     private sealed class DashboardFixture : IAsyncDisposable
@@ -134,12 +229,15 @@ public sealed class DashboardPresentationTests
         }
 
         public TestContext Context { get; }
+        public FixtureSyncService SyncService { get; private set; } = null!;
 
         public static async Task<DashboardFixture> CreateAsync(
             IReadOnlyCollection<Account> accounts,
             int needsReview,
             SyncStatus? syncStatus = null,
-            bool hasConnection = false)
+            bool hasConnection = false,
+            bool hasSpending = false,
+            bool blockSync = false)
         {
             var context = new TestContext();
             // Radzen creates its chart after render; the presentation assertions do
@@ -199,12 +297,16 @@ public sealed class DashboardPresentationTests
                     new Claim(PlutusAuthentication.SessionIdClaimType, sessionId.ToString("N")),
                     new Claim(PlutusAuthentication.PasswordHashFingerprintClaimType, fingerprint),
                 ], "fixture"));
-                ConfigureServices(context, factory, principal, fingerprint);
-            }
+                var syncService = new FixtureSyncService(blockSync);
+                ConfigureServices(context, factory, principal, fingerprint, syncService, hasSpending);
 
-            var keepAliveConnection = new SqliteConnection(connectionString);
-            await keepAliveConnection.OpenAsync();
-            return new DashboardFixture(context, databasePath, keepAliveConnection);
+                var keepAliveConnection = new SqliteConnection(connectionString);
+                await keepAliveConnection.OpenAsync();
+                return new DashboardFixture(context, databasePath, keepAliveConnection)
+                {
+                    SyncService = syncService,
+                };
+            }
         }
 
         public static Account Account(string currency, string suffix = "primary") => new()
@@ -220,7 +322,9 @@ public sealed class DashboardPresentationTests
             TestContext context,
             IDbContextFactory<PlutusDbContext> factory,
             ClaimsPrincipal principal,
-            string fingerprint)
+            string fingerprint,
+            FixtureSyncService syncService,
+            bool hasSpending)
         {
             var time = new FixedTimeProvider();
             var stateProvider = new FixtureAuthenticationStateProvider(principal);
@@ -232,12 +336,16 @@ public sealed class DashboardPresentationTests
             context.Services.AddScoped<AdministratorSessionStore>();
             context.Services.AddScoped<AdministratorSessionGuard>();
             context.Services.AddSingleton<IOptions<SyncOptions>>(Options.Create(new SyncOptions()));
-            context.Services.AddSingleton<ISyncService, FixtureSyncService>();
-            context.Services.AddSingleton<ISpendingReport>(new FixtureSpendingReport());
+            context.Services.AddSingleton<ISyncService>(syncService);
+            context.Services.AddSingleton<ISpendingReport>(new FixtureSpendingReport(hasSpending));
             context.Services.AddSingleton<INetWorthReport>(new FixtureNetWorthReport());
             context.Services.AddSingleton<ICategorizer, FixtureCategorizer>();
             context.Services.AddSingleton<ILogger<Home>>(NullLogger<Home>.Instance);
             context.Services.AddRadzenComponents();
+            if (hasSpending)
+            {
+                context.Services.AddSingleton<IJSRuntime, FixtureJsRuntime>();
+            }
         }
 
         public async ValueTask DisposeAsync()
@@ -272,15 +380,33 @@ public sealed class DashboardPresentationTests
             Task.FromResult(new AuthenticationState(principal));
     }
 
-    private sealed class FixtureSyncService : ISyncService
+    private sealed class FixtureSyncService(bool block)
+        : ISyncService
     {
-        public Task<SyncRun?> RunAsync(CancellationToken ct = default) => Task.FromResult<SyncRun?>(null);
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<SyncRun?> RunAsync(CancellationToken ct = default)
+        {
+            _started.TrySetResult();
+            if (block)
+            {
+                await _completed.Task.WaitAsync(ct);
+            }
+
+            return null;
+        }
+
+        public Task WaitUntilStartedAsync() => _started.Task;
+        public void Complete() => _completed.TrySetResult();
     }
 
-    private sealed class FixtureSpendingReport : ISpendingReport
+    private sealed class FixtureSpendingReport(bool hasSpending) : ISpendingReport
     {
         public Task<IReadOnlyList<CategorySpend>> GetMonthlySpendingAsync(int year, int month, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<CategorySpend>>([]);
+            Task.FromResult<IReadOnlyList<CategorySpend>>(hasSpending
+                ? [new CategorySpend(7, "Fixture category", "#123456", 100m)]
+                : []);
     }
 
     private sealed class FixtureNetWorthReport : INetWorthReport
@@ -296,5 +422,19 @@ public sealed class DashboardPresentationTests
             string? note,
             IReadOnlyList<Category> categories,
             CancellationToken ct = default) => Task.FromResult<CategorizationResult?>(null);
+    }
+
+    private sealed class FixtureJsRuntime : IJSRuntime
+    {
+        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) =>
+            ValueTask.FromResult(CreateResult<TValue>());
+
+        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args) =>
+            ValueTask.FromResult(CreateResult<TValue>());
+
+        private static TValue CreateResult<TValue>() =>
+            typeof(TValue).IsValueType
+                ? Activator.CreateInstance<TValue>()
+                : (TValue)Activator.CreateInstance(typeof(TValue))!;
     }
 }
