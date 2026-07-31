@@ -81,4 +81,18 @@ public sealed class AdministratorSessionStore(
                               session.PasswordHashFingerprint != passwordHashFingerprint)
             .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.RevokedAt, now), cancellationToken);
     }
+
+    /// <summary>
+    /// Recovery boundary for a restored database. This intentionally revokes every
+    /// unrevoked session, including ones with the current fingerprint, before the
+    /// application exposes endpoints.
+    /// </summary>
+    public async Task RevokeAllSessionsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await db.AdministratorSessions
+            .Where(session => session.RevokedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.RevokedAt, now), cancellationToken);
+    }
 }

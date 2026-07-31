@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Routing;
@@ -33,6 +34,27 @@ public sealed class AuthenticationTests
 
         Assert.Contains(PlutusAuthentication.PasswordHashEnvironmentVariable, missing.Message);
         Assert.DoesNotContain(malformedValue, malformed.Message);
+    }
+
+    [Fact]
+    public void Restore_session_revocation_flag_is_strictly_parsed()
+    {
+        var enabled = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [PlutusAuthentication.RevokeAllSessionsOnStartupConfigurationKey] = "true",
+            })
+            .Build();
+        var malformed = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [PlutusAuthentication.RevokeAllSessionsOnStartupConfigurationKey] = "not-a-boolean",
+            })
+            .Build();
+
+        Assert.True(PlutusAuthentication.GetRevokeAllSessionsOnStartup(enabled));
+        Assert.Throws<InvalidOperationException>(() =>
+            PlutusAuthentication.GetRevokeAllSessionsOnStartup(malformed));
     }
 
     [Fact]
@@ -196,6 +218,38 @@ public sealed class AuthenticationTests
         // rollback, but its server session was permanently revoked during H2
         // startup and must not be resurrected.
         Assert.Equal(HttpStatusCode.Redirect, (await rolledBack.GetAsync("/finance", oldCookie)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Restored_database_startup_flag_revokes_sessions_with_the_current_hash_before_hosting()
+    {
+        await using var original = await TestApplication.StartAsync();
+        var login = await original.GetLoginAsync();
+        var signIn = await original.PostLoginAsync(login, original.Password, "/finance");
+        var retainedCookie = TestApplication.GetCookie(signIn, original.SessionCookieName);
+
+        await using var restored = await TestApplication.StartAsync(
+            password: original.Password,
+            passwordHash: original.PasswordHash,
+            databasePath: original.DatabasePath,
+            dataProtectionPath: original.DataProtectionPath,
+            revokeAllSessionsOnStartup: true);
+
+        Assert.Equal(HttpStatusCode.Redirect, (await restored.GetAsync("/finance", retainedCookie)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Restore_session_revocation_failure_aborts_startup_before_the_application_is_available()
+    {
+        await using var original = await TestApplication.StartAsync();
+        await original.BreakSessionStoreAsync();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => TestApplication.StartAsync(
+            password: original.Password,
+            passwordHash: original.PasswordHash,
+            databasePath: original.DatabasePath,
+            dataProtectionPath: original.DataProtectionPath,
+            revokeAllSessionsOnStartup: true));
     }
 
     [Fact]
@@ -401,7 +455,8 @@ public sealed class AuthenticationTests
             string? password = null,
             string? passwordHash = null,
             string? databasePath = null,
-            string? dataProtectionPath = null)
+            string? dataProtectionPath = null,
+            bool revokeAllSessionsOnStartup = false)
         {
             password ??= $"test-{Guid.NewGuid():N}";
             passwordHash ??= new PasswordHasher<object>().HashPassword(new object(), password);
@@ -410,6 +465,14 @@ public sealed class AuthenticationTests
             {
                 EnvironmentName = environmentName,
             });
+            if (revokeAllSessionsOnStartup)
+            {
+                builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    [PlutusAuthentication.RevokeAllSessionsOnStartupConfigurationKey] = "true",
+                });
+            }
+
             builder.WebHost.UseTestServer();
             var ownsDatabasePath = databasePath is null;
             databasePath ??= Path.Combine(Path.GetTempPath(), $"plutus-auth-{Guid.NewGuid():N}.db");
@@ -423,37 +486,50 @@ public sealed class AuthenticationTests
             builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
             var application = builder.Build();
-            application.UseRateLimiter();
-            application.UseAuthentication();
-            application.UseAuthorization();
-            application.UseAntiforgery();
-            application.MapSingleAdministratorAuthentication();
-            application.MapGet("/finance", () => Results.Ok("protected finance data"));
-            application.MapRazorComponents<App>()
-                .AddInteractiveServerRenderMode()
-                .CloseConnectionsOnAuthenticationExpiration()
-                .RequireAuthorization();
-            await using (var scope = application.Services.CreateAsyncScope())
+            try
             {
-                var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PlutusDbContext>>();
-                await using var db = await factory.CreateDbContextAsync();
-                await db.Database.MigrateAsync();
-                var sessions = scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>();
-                await sessions.RevokeActiveSessionsWithDifferentFingerprintAsync(
-                    PlutusAuthentication.GetPasswordHashFingerprint(passwordHash));
-            }
-            await application.StartAsync();
+                application.UseRateLimiter();
+                application.UseAuthentication();
+                application.UseAuthorization();
+                application.UseAntiforgery();
+                application.MapSingleAdministratorAuthentication();
+                application.MapGet("/finance", () => Results.Ok("protected finance data"));
+                application.MapRazorComponents<App>()
+                    .AddInteractiveServerRenderMode()
+                    .CloseConnectionsOnAuthenticationExpiration()
+                    .RequireAuthorization();
+                await using (var scope = application.Services.CreateAsyncScope())
+                {
+                    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PlutusDbContext>>();
+                    await using var db = await factory.CreateDbContextAsync();
+                    await db.Database.MigrateAsync();
+                    var sessions = scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>();
+                    if (PlutusAuthentication.GetRevokeAllSessionsOnStartup(application.Configuration))
+                    {
+                        await sessions.RevokeAllSessionsAsync();
+                    }
 
-            return new TestApplication(
-                application,
-                loggerProvider,
-                password,
-                passwordHash,
-                databasePath,
-                dataProtectionPath,
-                ownsDatabasePath,
-                ownsDataProtectionPath,
-                scheme);
+                    await sessions.RevokeActiveSessionsWithDifferentFingerprintAsync(
+                        PlutusAuthentication.GetPasswordHashFingerprint(passwordHash));
+                }
+                await application.StartAsync();
+
+                return new TestApplication(
+                    application,
+                    loggerProvider,
+                    password,
+                    passwordHash,
+                    databasePath,
+                    dataProtectionPath,
+                    ownsDatabasePath,
+                    ownsDataProtectionPath,
+                    scheme);
+            }
+            catch
+            {
+                await application.DisposeAsync();
+                throw;
+            }
         }
 
         public async Task<LoginToken> GetLoginAsync(string? sessionCookie = null)

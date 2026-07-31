@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Configuration;
 using System.Threading.RateLimiting;
 
 namespace Plutus.Web.Authentication;
@@ -21,6 +22,7 @@ namespace Plutus.Web.Authentication;
 public static class PlutusAuthentication
 {
     public const string PasswordHashEnvironmentVariable = "PLUTUS_AUTH_PASSWORD_HASH";
+    public const string RevokeAllSessionsOnStartupConfigurationKey = "Plutus:Authentication:RevokeAllSessionsOnStartup";
     public const string LoginPath = "/login";
     public const string LogoutPath = "/logout";
     internal const string LoginRateLimitPolicy = "plutus-login";
@@ -43,6 +45,27 @@ public static class PlutusAuthentication
         }
 
         return configuredHash;
+    }
+
+    /// <summary>
+    /// Recovery-only startup switch for a restored database. Its value is parsed
+    /// strictly so a typo cannot silently weaken the restore runbook.
+    /// </summary>
+    public static bool GetRevokeAllSessionsOnStartup(IConfiguration configuration)
+    {
+        var configuredValue = configuration[RevokeAllSessionsOnStartupConfigurationKey];
+        if (string.IsNullOrWhiteSpace(configuredValue))
+        {
+            return false;
+        }
+
+        if (bool.TryParse(configuredValue, out var revokeAllSessions))
+        {
+            return revokeAllSessions;
+        }
+
+        throw new InvalidOperationException(
+            $"Application startup aborted: {RevokeAllSessionsOnStartupConfigurationKey} must be true or false.");
     }
 
     public static void AddSingleAdministratorAuthentication(

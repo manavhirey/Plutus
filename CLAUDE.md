@@ -50,13 +50,23 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
   are anonymous. Production cookies (including antiforgery) use host-safe names, `Secure`,
   `HttpOnly`, same-site strict, and an eight-hour hard maximum lifetime. SQLite stores a session
   record per login; logout/expiry/hash rotation invalidates it and InteractiveServer revalidates
-  every ten seconds. The hub transport also closes at authentication expiry. All Blazor
+  every ten seconds. The hub transport also closes at authentication expiry. Startup
+  durably revokes sessions with a mismatched hash fingerprint, so H1 → H2 → H1 cannot
+  revive a session unless stale database state is restored. All Blazor
   state-changing handlers hold a session-operation lease across I/O and commit; logout cancels and
   drains leases before persisting revocation. This coordinator is correct only for the current
   single-container deployment—replace it with shared coordination before adding replicas. Cookies
   are HTTPS-only in every environment. Docker hot reload uses a gitignored local PFX in
   `.dev-certs/`, mounted read-only with its password supplied by protected `.env`; never commit it.
-  Keep Caddy's HTTPS forwarding intact.
+  Keep Caddy's HTTPS forwarding intact. After any database restore, run one authenticated
+  startup with `PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP=true` (the Compose mapping
+  supplies `Plutus:Authentication:RevokeAllSessionsOnStartup`), verify it started, then
+  unset the flag and restart; the revocation write happens before endpoints host and fails
+  startup if unavailable. Back up/restore SQLite only while quiesced or through a
+  SQLite-supported consistent backup/snapshot (database + WAL + SHM) together with the
+  Data Protection keys. Never expose the pre-authentication image publicly as rollback;
+  keep it offline or behind temporary reverse-proxy access control until an authenticated
+  replacement is running.
 - The SimpleFIN access URL is stored **encrypted in the DB** via ASP.NET Data Protection;
   the key ring lives on the `plutus-data` volume — lose it and the connection can't decrypt.
 - `Program.cs` trusts `X-Forwarded-*` only from RFC1918 peers with `ForwardLimit = 1`;
@@ -74,7 +84,9 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
 - Authentication cutover: generate the hash with the app's interactive generator (minimum 16
   characters), put only the generated variable in the protected server environment, then deploy.
   The new administrator-session migration auto-applies and signs out legacy browser cookies.
-  Rotating the hash requires a container restart and invalidates existing sessions.
+  Rotating the hash requires a container restart and invalidates existing sessions. Preserve a
+  known-good authenticated image as the post-cutover rollback target; the prior unauthenticated
+  image must remain offline or access-controlled.
 
 ## One-off data jobs (backfills & diagnostics)
 Config-gated `BackgroundService`s in `src/Plutus.Web/BackgroundServices` run once on startup when their

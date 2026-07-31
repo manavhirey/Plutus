@@ -119,6 +119,7 @@ Non-secret settings live in `src/Plutus.Web/appsettings.json` (override with
 | --- | --- | --- |
 | `Plutus:Database:Path` | `plutus.db` | SQLite file path |
 | `Plutus:DataProtectionKeysPath` | `keys` | Key-ring directory (encrypts the SimpleFIN access URL) |
+| `Plutus:Authentication:RevokeAllSessionsOnStartup` | `false` | Recovery-only: revoke every session before hosting after a database restore |
 | `Plutus:Sync:DailyTime` | `06:00` | Local time for the daily sync |
 | `Plutus:Sync:LookBackDays` | `30` | First-run look-back window |
 | `Plutus:Sync:OverlapDays` | `3` | Re-fetch window on later syncs (deduped) |
@@ -155,7 +156,9 @@ the protected environment, and restart the container; the hash fingerprint in
 existing tickets ensures older sessions are rejected. At startup, the app also
 durably revokes all active sessions made with any different fingerprint before it
 serves endpoints. Therefore an H1 → H2 → H1 configuration rollback cannot revive
-an H1 session that H2 invalidated.
+an H1 session that H2 invalidated. This guarantee applies only to the same live
+database; restoring stale database/session data can revive an old cookie unless the
+restore recovery step below revokes all sessions first.
 
 ### Production authentication cutover checklist
 
@@ -163,22 +166,46 @@ Do these as one controlled change; do not copy credentials, certificates, keys, 
 database contents into this repository.
 
 1. Keep the existing Docker project identity, `plutus-data` volume, loopback port
-   binding, and host-managed Caddy route unchanged. Make a SQLite-consistent backup
-   of the database **together with its `-wal` and `-shm` sidecars**, plus the complete
-   Data Protection key-ring directory. A database-only restore can make the stored
-   SimpleFIN connection undecryptable.
-2. Record the currently running image and protected configuration as the rollback
-   target. Build/pull the new image, generate the administrator hash interactively,
-   put only the generated hash in the protected deployment environment, and restart
-   the existing Compose project. If verification fails, restore the complete backup
-   set as needed and restart the prior image with its prior protected configuration.
-3. Confirm anonymous `/finance` access redirects to login; sign in over the public
+   binding, and host-managed Caddy route unchanged. For a SQLite-consistent backup,
+   first quiesce/stop the app **or** use a SQLite-supported online backup or storage
+   snapshot that guarantees a coherent database, WAL, and SHM set. Never make
+   sequential live copies of `plutus.db`, `plutus.db-wal`, and `plutus.db-shm` and
+   call them a backup. Preserve the complete Data Protection key-ring directory with
+   that same recovery set; a database-only restore can make the stored SimpleFIN
+   connection undecryptable.
+2. Build/pull the new image, generate the administrator hash interactively, put only
+   the generated hash in the protected deployment environment, and restart the
+   existing Compose project. The image that predates this first authentication rollout
+   is **not** a public rollback target: if it must be used, keep it offline or place
+   temporary reverse-proxy access control in front of it until an authenticated image
+   is running again. After this rollout, retain a known-good authenticated image and
+   its protected configuration as the normal rollback target.
+3. After **any** database restore, invalidate restored sessions before public exposure.
+   Start the authenticated image once with the non-secret, one-shot Compose override:
+
+   ```bash
+   PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP=true docker compose up -d
+   ```
+
+   The app revokes every unrevoked SQLite session before it hosts endpoints; if that
+   write fails, startup fails closed. Verify the container started successfully, then
+   remove the override and restart normally so later restarts do not deliberately
+   sign out active sessions:
+
+   ```bash
+   PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP=false docker compose up -d
+   unset PLUTUS_AUTH_REVOKE_ALL_SESSIONS_ON_STARTUP
+   ```
+
+   This procedure needs no SQLite CLI and does not print, copy, or alter password
+   hashes or Data Protection keys.
+4. Confirm anonymous `/finance` access redirects to login; sign in over the public
    HTTPS URL; then log out and verify that a retained pre-logout cookie from another
    browser context is rejected. Also leave an authenticated interactive page open
    until ticket expiry and verify the server circuit disconnects and cannot perform
    a mutation. The test harness asserts endpoint configuration, but this real
    browser/circuit check remains a production smoke test.
-4. Verify Caddy forwards HTTPS scheme and WebSocket upgrade traffic to the
+5. Verify Caddy forwards HTTPS scheme and WebSocket upgrade traffic to the
    loopback-only app successfully. Confirm the app sees Caddy's actual private
    network peer as a trusted proxy (and no arbitrary external peer is trusted)
    before relying on forwarded `X-Forwarded-*` headers. Preserve the one-hop proxy

@@ -29,6 +29,7 @@ if (PasswordHashGenerator.IsRequested(args))
 // database. A deployment with a missing or malformed admin hash never starts.
 var builder = WebApplication.CreateBuilder(args);
 var passwordHash = PlutusAuthentication.GetRequiredPasswordHash();
+var revokeAllSessionsOnStartup = PlutusAuthentication.GetRevokeAllSessionsOnStartup(builder.Configuration);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -74,6 +75,14 @@ using (var scope = app.Services.CreateScope())
     // unavailable, startup fails rather than allowing a prior hash generation to
     // become valid again after a configuration rollback.
     var sessions = scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>();
+    if (revokeAllSessionsOnStartup)
+    {
+        // Recovery-only flag: a restored database can otherwise contain active
+        // session records for cookies that were valid before the backup was made.
+        // Any persistence failure aborts startup before endpoints are hosted.
+        await sessions.RevokeAllSessionsAsync();
+    }
+
     await sessions.RevokeActiveSessionsWithDifferentFingerprintAsync(
         PlutusAuthentication.GetPasswordHashFingerprint(passwordHash));
 }
