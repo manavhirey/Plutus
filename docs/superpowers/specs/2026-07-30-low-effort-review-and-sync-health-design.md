@@ -1,14 +1,14 @@
 # Low-effort transaction review and trustworthy sync health — design
 
 **Date:** 2026-07-30  
-**Status:** Draft; revised after independent review
+**Status:** Draft; revised for OpenAI provider migration
 
 ## Problem
 
 Plutus is not yet making expense logging feel effortless:
 
-- Claude already generates a plain-English note and tentative category, but Review asks the user to actively manage both fields.
-- Editing the note can invoke Claude during text entry, adding delay and unnecessary API calls.
+- The current model integration already generates a plain-English note and tentative category, but Review asks the user to actively manage both fields.
+- Editing the note can invoke the model during text entry, adding delay and unnecessary API calls.
 - Tentative categories are included in spending reports before the user has confirmed what a transaction was.
 - A SimpleFIN response containing upstream warnings can be recorded as a successful sync, even when the returned data is incomplete or stale.
 - The dashboard makes its primary job—reviewing new expenses—visually equal to secondary account and reporting information.
@@ -68,7 +68,7 @@ The migration is tested by upgrading a fixture SQLite database built from the pr
 
 ### Enrich separately from bank synchronization
 
-SimpleFIN ingestion must write newly received transactions immediately. A durable, bounded enrichment worker then asks Claude for a proposal. Claude latency, a rate limit, or a malformed result must never make a bank sync look failed.
+SimpleFIN ingestion must write newly received transactions immediately. A durable, bounded enrichment worker then asks the model for a proposal. Model latency, a rate limit, or a malformed result must never make a bank sync look failed.
 
 ```mermaid
 flowchart LR
@@ -97,6 +97,30 @@ SkippedTransfer is terminal. An edited-description categorization atomically cla
 
 The worker claims a row with an atomic compare-and-set transition from `Pending`/retryable `Failed` to `Processing`, recording a lease identifier, lease expiry, and next eligible retry time. It may only save a proposal when that lease is still held and the transaction is not finalized. On startup, expired leases return to `Pending`; review finalization always wins. Separate database contexts must be used in race-condition tests.
 
+### OpenAI provider migration
+
+OpenAI replaces Anthropic as Plutus's only model provider. The migration is a prerequisite to all remaining implementation milestones and has these fixed boundaries:
+
+- Replace the `Anthropic` package/client/categorizer implementation with the official `OpenAI` .NET SDK. Use the Responses API with `store: false`, so the application does not request server-side response persistence for financial transaction descriptions. Preserve the `ICategorizer` contract so callers do not change behavior during the provider-only migration.
+- Replace `ANTHROPIC_API_KEY` everywhere with `OPENAI_API_KEY`, read only from the process environment or the existing gitignored local secret mechanism. Never copy either key into configuration, SQLite, compose files, logs, tests, or documentation examples.
+- Replace `Plutus:Claude:Model` with `Plutus:OpenAI:Model`. Default to `gpt-5.6-luna`, the cost-sensitive GPT-5.6 variant, while retaining configuration override for a different compatible OpenAI model.
+- Use a strict JSON-schema structured-output request whose category remains constrained to the current user-managed category names. Set the configured model, low reasoning effort, a bounded 256-token output limit, and `store: false` on every request. Keep the existing factual-description guardrails and output fields (`category`, `note`, `confidence`); accept confidence only in the inclusive `0–1` range.
+- Remove Anthropic-specific configuration, comments, package references, and user-facing wording from active surfaces: `src/`, `tests/`, project files, `appsettings*`, both Compose files, README, and CLAUDE.md. Historical design/plan documents remain an accurate record of their original provider and are not mechanically rewritten. There is no provider fallback: a deployment is either configured for OpenAI or reports a clear missing-key/configuration error.
+- Test with fakes/mocked transport only. The migration must never spend API credits or require a real key in CI or containerized tests.
+
+The later enrichment milestone changes the missing-key behavior: Plutus and SimpleFIN synchronization will then remain usable with an unavailable/no-op OpenAI enricher, allowing manual review. That resilience change is deliberately separate from this behavior-preserving provider swap.
+
+### OpenAI deployment cutover
+
+The provider migration is not deployed until its operational cutover is prepared:
+
+1. Keep the current deployed image and its secure environment configuration as the rollback point; do not print, commit, or copy either provider key into task output.
+2. Add `OPENAI_API_KEY` to the deployed host's gitignored secret environment file. Verify Compose receives a non-empty key by running an in-container presence check that returns only an exit status—not `docker compose config`, which could print resolved secrets.
+3. Build/recreate the container, then run a one-time sanitised categorization smoke check using only an invented merchant string. Verify it produces schema-valid category/note/confidence output and that the app reports no secret in logs.
+4. If startup or the smoke check fails, roll back to the previous image and secure environment configuration; otherwise remove the obsolete Anthropic key from the deployed secret store.
+
+This operational test is distinct from unit tests and is the only migration verification permitted to make a real model request.
+
 ### Use a narrowly scoped structured-output agent
 
 Introduce an `ITransactionEnricher` boundary that receives only the raw description, amount, date, account name, and allowed category names. Its JSON result is:
@@ -111,7 +135,7 @@ For an unchanged agent proposal, approval makes no second model request. For an 
 
 The selected model remains configuration-driven. A lower-cost model should be the default for this bounded task, with the current configurable higher-capability option retained for override. Calls and failures may be counted, but descriptions and credentials must not be logged.
 
-The application and bank synchronization must start when no model key is configured. In that state, a no-op/unavailable enricher leaves transactions retryable and the Review page presents an editable manual path; it does not fail application startup. The same redaction policy applies to existing categorization and diagnostic code: remove raw merchant descriptions from failure logs, safely map upstream error text to bounded reason codes, and avoid account labels/last-four digits in model prompts and diagnostics unless strictly necessary and explicitly sanitized.
+The application and bank synchronization must start when no model key is configured. In that state, a no-op/unavailable OpenAI enricher leaves transactions retryable and the Review page presents an editable manual path; it does not fail application startup. The same redaction policy applies to existing categorization and diagnostic code: remove raw merchant descriptions from failure logs, safely map upstream error text to bounded reason codes, and avoid account labels/last-four digits in model prompts and diagnostics unless strictly necessary and explicitly sanitized.
 
 ### Make the dashboard an action center
 

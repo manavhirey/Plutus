@@ -13,6 +13,20 @@
 - Orchestrator: plans, assigns bounded tasks, consolidates review findings, and never writes implementation code.
 - Every implementation task begins with a clean worktree, a `git fetch`/integration check, focused automated tests, and a review before the next dependent task begins.
 
+## Milestone -1 — OpenAI provider migration
+
+This migration is intentionally provider-only: it makes `OPENAI_API_KEY` the sole model credential without changing the review workflow yet.
+
+- [ ] **-1.1 Replace the SDK and configuration boundary** — Replace Anthropic package references, client registration, options, categorizer implementation, tests, active docs, container environment wiring, and deployment configuration with OpenAI equivalents. Rename `Plutus:Claude:Model` to `Plutus:OpenAI:Model`; use `gpt-5.6-luna` as the configurable default.
+  - Preserve `ICategorizer` and its category/note/confidence contract. Use the official OpenAI .NET SDK's Responses API with `store: false` and a strict category-enum JSON-schema output. Every request sets the configured model, low reasoning effort, and a 256-token output limit; no live model calls are permitted in tests.
+  - Migrate these active surfaces only: `src/`, `tests/`, project files, `appsettings*`, `docker-compose.yml`, `docker-compose.dev.yml`, README, and CLAUDE.md. Historical dated plans/specs retain their original provider references. `OPENAI_API_KEY` is read only at runtime and never committed or logged.
+  - Tests: captured mocked-transport assertion for model/Responses endpoint/`store:false`/strict schema/reasoning/output limit; category schema constraint; valid/invalid/unknown/refusal/cancellation/provider-error responses; confidence bounds; model configuration binding; missing OpenAI key failure message; and full Docker test suite.
+
+- [ ] **-1.2 Independent provider-migration review** — GPT-5.6 Sol verifies no Anthropic runtime/configuration path remains, no secret can enter the repo or logs, structured category output is still constrained, documentation and Docker use `OPENAI_API_KEY`, and tests do not call the live API.
+
+- [ ] **-1.3 Controlled deployment cutover** — Retain the previous deployed image and secure environment configuration as rollback. Provision `OPENAI_API_KEY` only in the gitignored host secret environment file; verify a non-empty in-container value with a no-output presence check. Recreate the container, run one real sanitised categorization smoke check with an invented merchant string, then remove the obsolete Anthropic key only after success.
+  - Never use `docker compose config` or a command that prints the resolved key. If startup/smoke fails, restore the previous image and secure environment configuration.
+
 ## Milestone 0 — truthful and serialized SimpleFIN sync
 
 This milestone goes first because the agent workflow cannot be trusted if the underlying transactions are silently stale or partial.
@@ -44,10 +58,10 @@ This milestone goes first because the agent workflow cannot be trusted if the un
 - [ ] **1.1 Transaction state and migration** — Add proposal/final description fields, proposal category/confidence timestamps, enrichment status/attempt/error fields, retry timestamp, processing lease/version, queue index, and a pure finalization helper. Implement the canonical `Pending → Processing → Ready/Failed → Finalized` state machine; transfers use terminal `SkippedTransfer`. Migrate legacy pending suggestions and transfers using the design's explicit mapping table without data loss.
   - Tests: migration from an actual legacy SQLite schema, reviewed/unreviewed/manual-edit/uncategorized/transfer mappings, allowed/forbidden state transitions, raw-description immutability, transfer skip, finalization idempotence, and safe error normalization.
 
-- [ ] **1.2 Structured enrichment boundary and unavailable mode** — Add `ITransactionEnricher` and its Claude implementation with a constrained `description/category/confidence` schema. Keep the agent prompt factual and injection-resistant; add a no-op/unavailable implementation when no API key is configured so the app and bank sync still start.
+- [ ] **1.2 Structured enrichment boundary and unavailable mode** — Add `ITransactionEnricher` and its OpenAI implementation with a constrained `description/category/confidence` schema. Keep the agent prompt factual and injection-resistant; add a no-op/unavailable implementation when no API key is configured so the app and bank sync still start.
   - Tests: valid schema, invalid/empty JSON, unknown category, missing categories, unavailable-key composition-root startup, sanitized failure, and no raw description/account-last-four in logs or prompts.
 
-- [ ] **1.3 Durable enrichment worker** — Remove Claude work from the bank-ingestion critical path. Persist transactions as `Pending`, have a bounded hosted worker claim/process work with compare-and-set leases, retry transient agent failures, and skip transfers/finalized rows.
+- [ ] **1.3 Durable enrichment worker** — Remove OpenAI work from the bank-ingestion critical path. Persist transactions as `Pending`, have a bounded hosted worker claim/process work with compare-and-set leases, retry transient agent failures, and skip transfers/finalized rows.
   - Tests: bank sync succeeds with agent offline, retries cap, expired-lease recovery, worker/review race across separate contexts, finalization wins, transfer bypass, restart-safe processing.
 
 ## Milestone 2 — one-action review and trustworthy history
