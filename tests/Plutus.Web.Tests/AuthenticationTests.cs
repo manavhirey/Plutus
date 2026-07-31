@@ -104,9 +104,8 @@ public sealed class AuthenticationTests
         Assert.Equal(HttpStatusCode.Redirect, rejectedRedirect.StatusCode);
         Assert.Equal("/", rejectedRedirect.Headers.Location?.OriginalString);
         var sessionCookie = TestApplication.GetCookie(rejectedRedirect, app.SessionCookieName);
-        Assert.Contains("secure", sessionCookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("httponly", sessionCookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("samesite=strict", sessionCookie, StringComparison.OrdinalIgnoreCase);
+        AssertSecureHostCookie(sessionCookie);
+        AssertSecureHostCookie(login.Cookie);
 
         var authenticated = await app.GetAsync("/finance", sessionCookie);
         Assert.Equal(HttpStatusCode.OK, authenticated.StatusCode);
@@ -168,7 +167,7 @@ public sealed class AuthenticationTests
     }
 
     [Fact]
-    public async Task An_unexpired_ticket_from_before_password_rotation_is_rejected_by_a_new_configuration()
+    public async Task Password_hash_rotation_is_durable_across_a_rollback_to_a_previous_hash()
     {
         var oldPassword = $"old-{Guid.NewGuid():N}";
         var oldHash = new PasswordHasher<object>().HashPassword(new object(), oldPassword);
@@ -186,6 +185,17 @@ public sealed class AuthenticationTests
             dataProtectionPath: original.DataProtectionPath);
 
         Assert.Equal(HttpStatusCode.Redirect, (await rotated.GetAsync("/finance", oldCookie)).StatusCode);
+
+        await using var rolledBack = await TestApplication.StartAsync(
+            password: oldPassword,
+            passwordHash: oldHash,
+            databasePath: original.DatabasePath,
+            dataProtectionPath: original.DataProtectionPath);
+
+        // The H1 ticket is cryptographically valid again after configuration
+        // rollback, but its server session was permanently revoked during H2
+        // startup and must not be resurrected.
+        Assert.Equal(HttpStatusCode.Redirect, (await rolledBack.GetAsync("/finance", oldCookie)).StatusCode);
     }
 
     [Fact]
@@ -222,7 +232,9 @@ public sealed class AuthenticationTests
         var signIn = await app.PostLoginAsync(login, app.Password, "/finance");
         var sessionCookie = TestApplication.GetCookie(signIn, app.SessionCookieName);
 
-        Assert.True(app.CloseOnAuthenticationExpiration);
+        Assert.NotEmpty(app.ConnectionEndpointOptions);
+        Assert.All(app.ConnectionEndpointOptions, options =>
+            Assert.True(options.CloseOnAuthenticationExpiration));
         await app.BreakSessionStoreAsync();
         Assert.Equal(HttpStatusCode.Redirect, (await app.GetAsync("/finance", sessionCookie)).StatusCode);
     }
@@ -248,6 +260,98 @@ public sealed class AuthenticationTests
         lease.Dispose();
         await revoke;
         Assert.False(await app.IsSessionValidAsync(session.Id, session.PasswordHashFingerprint));
+    }
+
+    [Fact]
+    public async Task Logout_cancellation_callbacks_can_reenter_without_deadlocking_or_leasing_after_revocation()
+    {
+        await using var app = await TestApplication.StartAsync();
+        var session = await app.CreateSessionAsync(
+            PlutusAuthentication.GetPasswordHashFingerprint(app.PasswordHash),
+            DateTime.UtcNow.AddMinutes(5));
+        using var lease = await app.AcquireLeaseAsync(session.Id, session.PasswordHashFingerprint);
+        Assert.NotNull(lease);
+
+        var reentrantAcquireWasDenied = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var throwingRegistration = lease!.CancellationToken.Register(static () =>
+            throw new InvalidOperationException("A cancellation callback failed."));
+        using var reentrantRegistration = lease.CancellationToken.Register(() =>
+        {
+            var reentrantLease = app.AcquireLeaseAsync(session.Id, session.PasswordHashFingerprint)
+                .GetAwaiter().GetResult();
+            reentrantAcquireWasDenied.TrySetResult(reentrantLease is null);
+            reentrantLease?.Dispose();
+            lease.Dispose();
+        });
+
+        await app.RevokeAndDrainAsync(session.Id).WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.True(await reentrantAcquireWasDenied.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.False(await app.IsSessionValidAsync(session.Id, session.PasswordHashFingerprint));
+    }
+
+    [Fact]
+    public async Task Logout_cancels_an_acquisition_while_its_durable_validation_is_in_flight()
+    {
+        await using var app = await TestApplication.StartAsync();
+        var session = await app.CreateSessionAsync(
+            PlutusAuthentication.GetPasswordHashFingerprint(app.PasswordHash),
+            DateTime.UtcNow.AddMinutes(5));
+        var validationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var validationCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var acquisition = app.AcquireBlockedLeaseAsync(session.Id, validationStarted, validationCancelled);
+        await validationStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var revocation = app.RevokeAndDrainAsync(session.Id);
+        await validationCancelled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Null(await acquisition.WaitAsync(TimeSpan.FromSeconds(2)));
+        await revocation.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.False(await app.IsSessionValidAsync(session.Id, session.PasswordHashFingerprint));
+    }
+
+    [Fact]
+    public async Task Session_migration_preserves_existing_data_from_the_pre_authentication_schema()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"plutus-migration-{Guid.NewGuid():N}.db");
+        try
+        {
+            var options = new DbContextOptionsBuilder<PlutusDbContext>()
+                .UseSqlite($"Data Source={databasePath}")
+                .Options;
+            await using var db = new PlutusDbContext(options);
+            await db.Database.MigrateAsync("20260608183204_AddTransferCategoryAndExcludeFromSpending");
+            db.Categories.Add(new Plutus.Core.Models.Category
+            {
+                Name = "Existing data",
+                Color = "#123456",
+                IsSystem = false,
+                SortOrder = 99,
+            });
+            await db.SaveChangesAsync();
+
+            await db.Database.MigrateAsync();
+
+            var preservedCategory = await db.Categories.SingleAsync(category => category.SortOrder == 99);
+            Assert.Equal("Existing data", preservedCategory.Name);
+            Assert.False(await db.AdministratorSessions.AnyAsync());
+        }
+        finally
+        {
+            File.Delete(databasePath);
+            File.Delete($"{databasePath}-wal");
+            File.Delete($"{databasePath}-shm");
+        }
+    }
+
+    private static void AssertSecureHostCookie(string cookie)
+    {
+        Assert.StartsWith("__Host-", cookie, StringComparison.Ordinal);
+        Assert.Contains("path=/", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class TestApplication : IAsyncDisposable
@@ -334,6 +438,9 @@ public sealed class AuthenticationTests
                 var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PlutusDbContext>>();
                 await using var db = await factory.CreateDbContextAsync();
                 await db.Database.MigrateAsync();
+                var sessions = scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>();
+                await sessions.RevokeActiveSessionsWithDifferentFingerprintAsync(
+                    PlutusAuthentication.GetPasswordHashFingerprint(passwordHash));
             }
             await application.StartAsync();
 
@@ -424,10 +531,10 @@ public sealed class AuthenticationTests
                 setters.SetProperty(session => session.ExpiresAt, DateTime.UtcNow.AddSeconds(-1)));
         }
 
-        public bool CloseOnAuthenticationExpiration => _application.Services.GetServices<EndpointDataSource>()
+        public IReadOnlyList<HttpConnectionDispatcherOptions> ConnectionEndpointOptions => _application.Services.GetServices<EndpointDataSource>()
             .SelectMany(source => source.Endpoints)
             .SelectMany(endpoint => endpoint.Metadata.OfType<HttpConnectionDispatcherOptions>())
-            .Any(options => options.CloseOnAuthenticationExpiration);
+            .ToList();
 
         public async Task BreakSessionStoreAsync()
         {
@@ -445,6 +552,29 @@ public sealed class AuthenticationTests
             var store = scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>();
             var coordinator = scope.ServiceProvider.GetRequiredService<AdministratorSessionOperationCoordinator>();
             return await coordinator.TryAcquireAsync(sessionId, fingerprint, store);
+        }
+
+        public async Task<AdministratorSessionOperationCoordinator.AdministratorSessionOperationLease?> AcquireBlockedLeaseAsync(
+            Guid sessionId,
+            TaskCompletionSource validationStarted,
+            TaskCompletionSource validationCancelled)
+        {
+            await using var scope = _application.Services.CreateAsyncScope();
+            var coordinator = scope.ServiceProvider.GetRequiredService<AdministratorSessionOperationCoordinator>();
+            return await coordinator.TryAcquireAsync(sessionId, async cancellationToken =>
+            {
+                validationStarted.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    return null;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    validationCancelled.TrySetResult();
+                    throw;
+                }
+            });
         }
 
         public async Task RevokeAndDrainAsync(Guid sessionId)

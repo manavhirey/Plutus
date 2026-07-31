@@ -101,10 +101,11 @@ set +a
 dotnet run --project src/Plutus.Web
 ```
 
-When the app exits, run `unset OPENAI_API_KEY PLUTUS_AUTH_PASSWORD_HASH` or close
-that shell. Authentication and antiforgery cookies are HTTPS-only in every
-environment. Use the HTTPS launch profile (`https://localhost:7165`) locally, or
-the HTTPS Docker hot-reload command above; the HTTP profile cannot sign in.
+When the app exits, run `unset OPENAI_API_KEY PLUTUS_AUTH_PASSWORD_HASH
+PLUTUS_DEV_CERT_PASSWORD` or close that shell. Authentication and antiforgery
+cookies are HTTPS-only in every environment. Use the HTTPS launch profile
+(`https://localhost:7165`) locally, or the HTTPS Docker hot-reload command above;
+the HTTP profile cannot sign in.
 
 The SQLite database and Data Protection keys are created under the app content root
 on first run; the schema migrates automatically at startup.
@@ -151,7 +152,37 @@ session-table migration applies automatically on startup. Existing browser cooki
 from before this release cannot have a server session record and will be asked to
 sign in again. To rotate the administrator password, generate a new hash, update
 the protected environment, and restart the container; the hash fingerprint in
-existing tickets ensures older sessions are rejected.
+existing tickets ensures older sessions are rejected. At startup, the app also
+durably revokes all active sessions made with any different fingerprint before it
+serves endpoints. Therefore an H1 → H2 → H1 configuration rollback cannot revive
+an H1 session that H2 invalidated.
+
+### Production authentication cutover checklist
+
+Do these as one controlled change; do not copy credentials, certificates, keys, or
+database contents into this repository.
+
+1. Keep the existing Docker project identity, `plutus-data` volume, loopback port
+   binding, and host-managed Caddy route unchanged. Make a SQLite-consistent backup
+   of the database **together with its `-wal` and `-shm` sidecars**, plus the complete
+   Data Protection key-ring directory. A database-only restore can make the stored
+   SimpleFIN connection undecryptable.
+2. Record the currently running image and protected configuration as the rollback
+   target. Build/pull the new image, generate the administrator hash interactively,
+   put only the generated hash in the protected deployment environment, and restart
+   the existing Compose project. If verification fails, restore the complete backup
+   set as needed and restart the prior image with its prior protected configuration.
+3. Confirm anonymous `/finance` access redirects to login; sign in over the public
+   HTTPS URL; then log out and verify that a retained pre-logout cookie from another
+   browser context is rejected. Also leave an authenticated interactive page open
+   until ticket expiry and verify the server circuit disconnects and cannot perform
+   a mutation. The test harness asserts endpoint configuration, but this real
+   browser/circuit check remains a production smoke test.
+4. Verify Caddy forwards HTTPS scheme and WebSocket upgrade traffic to the
+   loopback-only app successfully. Confirm the app sees Caddy's actual private
+   network peer as a trusted proxy (and no arbitrary external peer is trusted)
+   before relying on forwarded `X-Forwarded-*` headers. Preserve the one-hop proxy
+   topology when changing Caddy or Docker networking.
 
 ## Containerize
 

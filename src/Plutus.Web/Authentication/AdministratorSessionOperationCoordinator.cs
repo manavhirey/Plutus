@@ -1,3 +1,5 @@
+using Plutus.Core.Models;
+
 namespace Plutus.Web.Authentication;
 
 /// <summary>
@@ -17,6 +19,22 @@ public sealed class AdministratorSessionOperationCoordinator(TimeProvider timePr
         AdministratorSessionStore sessionStore,
         CancellationToken cancellationToken = default)
     {
+        return await TryAcquireAsync(
+            sessionId,
+            token => sessionStore.GetActiveAsync(sessionId, passwordHashFingerprint, token),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Acquires a lease only after the caller has validated the durable session.
+    /// The validation receives a token linked to the session, so logout can cancel
+    /// an acquisition that is still waiting on storage.
+    /// </summary>
+    public async Task<AdministratorSessionOperationLease?> TryAcquireAsync(
+        Guid sessionId,
+        Func<CancellationToken, Task<AdministratorSession?>> getActiveSession,
+        CancellationToken cancellationToken = default)
+    {
         SessionEntry entry;
         lock (_gate)
         {
@@ -32,7 +50,10 @@ public sealed class AdministratorSessionOperationCoordinator(TimeProvider timePr
         var lease = new AdministratorSessionOperationLease(this, sessionId, entry);
         try
         {
-            var session = await sessionStore.GetActiveAsync(sessionId, passwordHashFingerprint, cancellationToken);
+            using var validationCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                entry.Cancellation.Token);
+            var session = await getActiveSession(validationCancellation.Token);
             if (session is null || !lease.SetExpiration(session.ExpiresAt, timeProvider.GetUtcNow().UtcDateTime))
             {
                 lease.Dispose();
@@ -47,6 +68,13 @@ public sealed class AdministratorSessionOperationCoordinator(TimeProvider timePr
             lease.Dispose();
             throw;
         }
+        catch (OperationCanceledException)
+        {
+            // The session was revoked or expired while storage validation was
+            // in flight. A cancelled acquisition never becomes a usable lease.
+            lease.Dispose();
+            return null;
+        }
         catch (Exception)
         {
             lease.Dispose();
@@ -59,12 +87,26 @@ public sealed class AdministratorSessionOperationCoordinator(TimeProvider timePr
         Func<CancellationToken, Task> persistRevocation)
     {
         Task drained;
+        SessionEntry entry;
         lock (_gate)
         {
-            var entry = GetOrCreateEntry(sessionId);
+            entry = GetOrCreateEntry(sessionId);
             entry.Revoking = true;
-            entry.Cancellation.Cancel();
             drained = entry.ActiveOperations == 0 ? Task.CompletedTask : entry.Drained.Task;
+        }
+
+        // Cancellation callbacks can synchronously execute arbitrary user code,
+        // including code that re-enters this coordinator. Never invoke them while
+        // holding _gate. A throwing callback must not let a session continue.
+        try
+        {
+            entry.Cancellation.Cancel(throwOnFirstException: false);
+        }
+        catch (Exception)
+        {
+            // Cancel(false) marks the token cancelled and invokes all callbacks
+            // before it aggregates callback failures. Draining still protects the
+            // logout boundary, so callback failures are deliberately contained.
         }
 
         // Do not use RequestAborted here: a server that has begun a logout must
@@ -72,6 +114,19 @@ public sealed class AdministratorSessionOperationCoordinator(TimeProvider timePr
         // as ended. This single-instance coordinator is the shared boundary.
         await drained;
         await persistRevocation(CancellationToken.None);
+
+        lock (_gate)
+        {
+            if (_sessions.TryGetValue(sessionId, out var current) &&
+                ReferenceEquals(current, entry) &&
+                entry.ActiveOperations == 0)
+            {
+                _sessions.Remove(sessionId);
+                // Do not dispose the source here: a just-released acquisition may
+                // still be unwinding a linked validation token. Once no lease or
+                // callback references this removed entry, the source is collectible.
+            }
+        }
     }
 
     private SessionEntry GetOrCreateEntry(Guid sessionId)

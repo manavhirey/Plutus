@@ -69,6 +69,13 @@ using (var scope = app.Services.CreateScope())
     var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PlutusDbContext>>();
     await using var db = factory.CreateDbContext();
     await db.Database.MigrateAsync();
+
+    // This must complete before endpoints are mapped or hosted. If storage is
+    // unavailable, startup fails rather than allowing a prior hash generation to
+    // become valid again after a configuration rollback.
+    var sessions = scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>();
+    await sessions.RevokeActiveSessionsWithDifferentFingerprintAsync(
+        PlutusAuthentication.GetPasswordHashFingerprint(passwordHash));
 }
 
 // Headless provisioning: if a SimpleFIN setup token is supplied via configuration
@@ -103,7 +110,7 @@ if (!string.IsNullOrWhiteSpace(setupToken))
 
 // Honor X-Forwarded-* only from the reverse proxy on the private Docker network —
 // not from arbitrary clients, which could otherwise spoof scheme/client IP.
-// ForwardLimit = 1 trusts only the last hop (Traefik).
+// ForwardLimit = 1 trusts only the last hop (the host-managed Caddy proxy).
 var forwardedHeaders = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,

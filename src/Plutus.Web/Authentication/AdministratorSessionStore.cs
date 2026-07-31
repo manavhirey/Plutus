@@ -63,4 +63,22 @@ public sealed class AdministratorSessionStore(
             .Where(session => session.Id == sessionId && session.RevokedAt == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.RevokedAt, now), cancellationToken);
     }
+
+    /// <summary>
+    /// Makes a configured password-hash rotation durable. This runs before the
+    /// application exposes endpoints, so rolling back to a previously used hash
+    /// cannot resurrect any session invalidated by an intervening rotation.
+    /// </summary>
+    public async Task RevokeActiveSessionsWithDifferentFingerprintAsync(
+        string passwordHashFingerprint,
+        CancellationToken cancellationToken = default)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await db.AdministratorSessions
+            .Where(session => session.RevokedAt == null &&
+                              session.ExpiresAt > now &&
+                              session.PasswordHashFingerprint != passwordHashFingerprint)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.RevokedAt, now), cancellationToken);
+    }
 }
