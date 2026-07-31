@@ -10,16 +10,19 @@ namespace Plutus.Web.Authentication;
 public sealed class AdministratorSessionGuard(
     AuthenticationStateProvider authenticationStateProvider,
     AdministratorSessionStore sessions,
-    AdministratorAuthenticationState authenticationState)
+    AdministratorAuthenticationState authenticationState,
+    AdministratorSessionOperationCoordinator coordinator)
 {
-    public async Task<bool> EnsureValidAsync(CancellationToken cancellationToken = default)
+    public async Task<AdministratorSessionOperationCoordinator.AdministratorSessionOperationLease?> AcquireLeaseAsync(
+        CancellationToken cancellationToken = default)
     {
         try
         {
             var principal = (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
             return PlutusAuthentication.TryGetSessionId(principal, out var sessionId) &&
-                   PlutusAuthentication.HasExpectedFingerprint(principal, authenticationState.PasswordHashFingerprint) &&
-                   await sessions.IsValidAsync(sessionId, authenticationState.PasswordHashFingerprint, cancellationToken);
+                   PlutusAuthentication.HasExpectedFingerprint(principal, authenticationState.PasswordHashFingerprint)
+                ? await coordinator.TryAcquireAsync(sessionId, authenticationState.PasswordHashFingerprint, sessions, cancellationToken)
+                : null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -27,7 +30,7 @@ public sealed class AdministratorSessionGuard(
         }
         catch (Exception)
         {
-            return false;
+            return null;
         }
     }
 }

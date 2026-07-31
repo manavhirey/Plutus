@@ -37,9 +37,17 @@ public sealed class AdministratorSessionStore(
         string passwordHashFingerprint,
         CancellationToken cancellationToken = default)
     {
+        return await GetActiveAsync(sessionId, passwordHashFingerprint, cancellationToken) is not null;
+    }
+
+    public async Task<AdministratorSession?> GetActiveAsync(
+        Guid sessionId,
+        string passwordHashFingerprint,
+        CancellationToken cancellationToken = default)
+    {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.AdministratorSessions.AsNoTracking().AnyAsync(
+        return await db.AdministratorSessions.AsNoTracking().SingleOrDefaultAsync(
             session => session.Id == sessionId &&
                        session.RevokedAt == null &&
                        session.ExpiresAt > now &&

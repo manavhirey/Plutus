@@ -233,7 +233,8 @@ else
             return;
         }
 
-        if (!await SessionGuard.EnsureValidAsync())
+        using var lease = await SessionGuard.AcquireLeaseAsync();
+        if (lease is null)
         {
             return;
         }
@@ -241,8 +242,12 @@ else
         _syncing = true;
         try
         {
-            await SyncService.RunAsync();
+            await SyncService.RunAsync(lease.CancellationToken);
             await LoadDataAsync();
+        }
+        catch (OperationCanceledException) when (lease.CancellationToken.IsCancellationRequested)
+        {
+            // Logout, expiry, or password rotation cancelled this active operation.
         }
         catch (Exception ex)
         {

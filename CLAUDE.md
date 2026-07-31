@@ -50,9 +50,13 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
   are anonymous. Production cookies (including antiforgery) use host-safe names, `Secure`,
   `HttpOnly`, same-site strict, and an eight-hour hard maximum lifetime. SQLite stores a session
   record per login; logout/expiry/hash rotation invalidates it and InteractiveServer revalidates
-  every ten seconds. All Blazor state-changing handlers use the same guard before writes. The
-  `Development`-only loopback hot-reload workflow uses request-matched cookies so local HTTP works;
-  never use that environment on the server. Keep Caddy's HTTPS forwarding intact.
+  every ten seconds. The hub transport also closes at authentication expiry. All Blazor
+  state-changing handlers hold a session-operation lease across I/O and commit; logout cancels and
+  drains leases before persisting revocation. This coordinator is correct only for the current
+  single-container deployment—replace it with shared coordination before adding replicas. Cookies
+  are HTTPS-only in every environment. Docker hot reload uses a gitignored local PFX in
+  `.dev-certs/`, mounted read-only with its password supplied by protected `.env`; never commit it.
+  Keep Caddy's HTTPS forwarding intact.
 - The SimpleFIN access URL is stored **encrypted in the DB** via ASP.NET Data Protection;
   the key ring lives on the `plutus-data` volume — lose it and the connection can't decrypt.
 - `Program.cs` trusts `X-Forwarded-*` only from RFC1918 peers with `ForwardLimit = 1`;

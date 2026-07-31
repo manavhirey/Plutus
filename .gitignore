@@ -26,6 +26,7 @@ appsettings.*.local.json
 secrets.json
 .env
 .env.local
+.dev-certs/
 
 # Brainstorming companion + local session scratch
 .superpowers/

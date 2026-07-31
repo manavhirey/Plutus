@@ -34,7 +34,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddRadzenComponents();
-builder.Services.AddSingleAdministratorAuthentication(passwordHash, builder.Environment);
+builder.Services.AddSingleAdministratorAuthentication(passwordHash);
 
 // Persist the Data Protection key ring to disk so the encrypted SimpleFIN access
 // URL stays decryptable across restarts (this folder is a volume when containerized).
@@ -135,6 +135,7 @@ app.MapStaticAssets().AllowAnonymous();
 app.MapSingleAdministratorAuthentication();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
+    .CloseConnectionsOnAuthenticationExpiration()
     .RequireAuthorization();
 
 app.Run();

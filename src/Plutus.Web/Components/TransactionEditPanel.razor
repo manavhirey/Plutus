@@ -126,7 +126,8 @@
             return;
         }
 
-        if (!await SessionGuard.EnsureValidAsync())
+        using var lease = await SessionGuard.AcquireLeaseAsync();
+        if (lease is null)
         {
             return;
         }
@@ -135,14 +136,18 @@
         try
         {
             int? categoryId = _selectedCategoryId == 0 ? null : _selectedCategoryId;
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var txn = await db.Transactions.FirstOrDefaultAsync(t => t.Id == TransactionId.Value);
+            await using var db = await DbFactory.CreateDbContextAsync(lease.CancellationToken);
+            var txn = await db.Transactions.FirstOrDefaultAsync(t => t.Id == TransactionId.Value, lease.CancellationToken);
             if (txn is not null)
             {
                 TransactionEditor.ApplyEdit(txn, categoryId, _note, Time.GetUtcNow());
-                await db.SaveChangesAsync();
+                await db.SaveChangesAsync(lease.CancellationToken);
             }
             await OnSaved.InvokeAsync();
+        }
+        catch (OperationCanceledException) when (lease.CancellationToken.IsCancellationRequested)
+        {
+            // The session ended before this edit could complete.
         }
         catch (Exception ex)
         {

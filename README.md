@@ -53,6 +53,23 @@ PLUTUS_AUTH_PASSWORD_HASH=...
 OPENAI_API_KEY=...
 ```
 
+The HTTPS hot-reload override also needs a local development certificate. Create
+it once without placing its password in command history; the certificate directory
+is ignored by Git and is mounted read-only into the container:
+
+```bash
+mkdir -p .dev-certs && chmod 700 .dev-certs
+read -rs PLUTUS_DEV_CERT_PASSWORD
+export PLUTUS_DEV_CERT_PASSWORD
+dotnet dev-certs https --trust
+dotnet dev-certs https -ep .dev-certs/plutus-dev.pfx -p "$PLUTUS_DEV_CERT_PASSWORD"
+unset PLUTUS_DEV_CERT_PASSWORD
+```
+
+Then add `PLUTUS_DEV_CERT_PASSWORD=...` to the same protected `.env` file using
+the editor. The PFX file and its password are local development secrets: never
+commit either one.
+
 ```bash
 # Restore, build, and run the complete test suite
 docker compose -f docker-compose.dev.yml run --rm dotnet
@@ -60,7 +77,7 @@ docker compose -f docker-compose.dev.yml run --rm dotnet
 # Build without an API key
 docker compose -f docker-compose.dev.yml run --rm dotnet dotnet build Plutus.slnx
 
-# Start the app with hot reload at http://localhost:8080
+# Start the app with hot reload at https://localhost:8080
 docker compose -f docker-compose.dev.yml -f docker-compose.dev.app.yml run --rm --service-ports dotnet \
   dotnet watch --project src/Plutus.Web run --no-launch-profile
 ```
@@ -85,11 +102,9 @@ dotnet run --project src/Plutus.Web
 ```
 
 When the app exits, run `unset OPENAI_API_KEY PLUTUS_AUTH_PASSWORD_HASH` or close
-that shell. In the `Development` environment only, the loopback-only hot-reload
-Compose port and the local HTTP launch profile use request-matched cookies so the
-interactive login works over local HTTP. This exception is selected solely by the
-environment name; never set `ASPNETCORE_ENVIRONMENT=Development` on the server.
-Production and non-Development environments always issue HTTPS-only cookies.
+that shell. Authentication and antiforgery cookies are HTTPS-only in every
+environment. Use the HTTPS launch profile (`https://localhost:7165`) locally, or
+the HTTPS Docker hot-reload command above; the HTTP profile cannot sign in.
 
 The SQLite database and Data Protection keys are created under the app content root
 on first run; the schema migrates automatically at startup.
@@ -116,9 +131,13 @@ one administrator password; there is no registration, password reset, or recover
 endpoint. Login is rate-limited and protected by antiforgery; sessions use secure,
 HTTP-only, same-site cookies and have a hard eight-hour maximum lifetime. Each
 login also has a durable SQLite session record. Logout, session expiry, or a
-password-hash rotation invalidates every tab that presents that session; live
-InteractiveServer circuits revalidate every ten seconds and all state-changing
-handlers check the same record before writing finance data.
+password-hash rotation invalidates every tab that presents that session; the
+InteractiveServer transport closes at ticket expiry and live circuits revalidate
+every ten seconds. Each state-changing handler acquires a session operation lease
+and holds it through all I/O and its database commit. Logout atomically blocks new
+leases, cancels and drains existing leases, then persists revocation before its
+response completes. This coordination is intentionally single-instance; deploying
+multiple app replicas requires replacing it with a shared distributed lease store.
 
 For Docker Compose, put `OPENAI_API_KEY=...` and the generated
 `PLUTUS_AUTH_PASSWORD_HASH=...` in the gitignored, owner-only project-root `.env`

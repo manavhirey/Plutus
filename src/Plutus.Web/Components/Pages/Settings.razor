@@ -168,7 +168,8 @@
 
     private async Task ConnectAsync()
     {
-        if (!await SessionGuard.EnsureValidAsync())
+        using var lease = await SessionGuard.AcquireLeaseAsync();
+        if (lease is null)
         {
             return;
         }
@@ -177,11 +178,16 @@
         _bannerMessage = null;
         try
         {
-            await ConnectionService.ConnectAsync(_setupToken.Trim());
+            await ConnectionService.ConnectAsync(_setupToken.Trim(), lease.CancellationToken);
             _setupToken = "";
             _bannerOk = true;
             _bannerMessage = "Connected to SimpleFIN successfully.";
             await LoadAsync();
+        }
+        catch (OperationCanceledException) when (lease.CancellationToken.IsCancellationRequested)
+        {
+            _bannerOk = false;
+            _bannerMessage = "Your session ended before the connection could be saved.";
         }
         catch (Exception ex)
         {
@@ -196,57 +202,81 @@
 
     private async Task SaveCategoryAsync(CategoryRow row)
     {
-        if (!await SessionGuard.EnsureValidAsync())
+        using var lease = await SessionGuard.AcquireLeaseAsync();
+        if (lease is null)
         {
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == row.Id);
-        if (category is not null)
+        try
         {
-            category.Name = row.Name.Trim();
-            category.Color = string.IsNullOrWhiteSpace(row.Color) ? null : row.Color!.Trim();
-            category.SortOrder = row.SortOrder;
-            await db.SaveChangesAsync();
-        }
+            await using var db = await DbFactory.CreateDbContextAsync(lease.CancellationToken);
+            var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == row.Id, lease.CancellationToken);
+            if (category is not null)
+            {
+                category.Name = row.Name.Trim();
+                category.Color = string.IsNullOrWhiteSpace(row.Color) ? null : row.Color!.Trim();
+                category.SortOrder = row.SortOrder;
+                await db.SaveChangesAsync(lease.CancellationToken);
+            }
 
-        await LoadAsync();
+            await LoadAsync();
+        }
+        catch (OperationCanceledException) when (lease.CancellationToken.IsCancellationRequested)
+        {
+            // The session ended before this category update could complete.
+        }
     }
 
     private async Task DeleteCategoryAsync(int id)
     {
-        if (!await SessionGuard.EnsureValidAsync())
+        using var lease = await SessionGuard.AcquireLeaseAsync();
+        if (lease is null)
         {
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        await db.Categories.Where(c => c.Id == id).ExecuteDeleteAsync();
-        await LoadAsync();
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync(lease.CancellationToken);
+            await db.Categories.Where(c => c.Id == id).ExecuteDeleteAsync(lease.CancellationToken);
+            await LoadAsync();
+        }
+        catch (OperationCanceledException) when (lease.CancellationToken.IsCancellationRequested)
+        {
+            // The session ended before this category deletion could complete.
+        }
     }
 
     private async Task AddCategoryAsync()
     {
-        if (!await SessionGuard.EnsureValidAsync())
+        using var lease = await SessionGuard.AcquireLeaseAsync();
+        if (lease is null)
         {
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var nextSort = _categories.Count == 0 ? 0 : _categories.Max(c => c.SortOrder) + 1;
-        db.Categories.Add(new Category
+        try
         {
-            Name = _newCategoryName.Trim(),
-            Color = string.IsNullOrWhiteSpace(_newCategoryColor) ? null : _newCategoryColor.Trim(),
-            IsSystem = false,
-            SortOrder = nextSort,
-        });
-        await db.SaveChangesAsync();
+            await using var db = await DbFactory.CreateDbContextAsync(lease.CancellationToken);
+            var nextSort = _categories.Count == 0 ? 0 : _categories.Max(c => c.SortOrder) + 1;
+            db.Categories.Add(new Category
+            {
+                Name = _newCategoryName.Trim(),
+                Color = string.IsNullOrWhiteSpace(_newCategoryColor) ? null : _newCategoryColor.Trim(),
+                IsSystem = false,
+                SortOrder = nextSort,
+            });
+            await db.SaveChangesAsync(lease.CancellationToken);
 
-        _newCategoryName = "";
-        _newCategoryColor = "#4F46E5";
-        await LoadAsync();
+            _newCategoryName = "";
+            _newCategoryColor = "#4F46E5";
+            await LoadAsync();
+        }
+        catch (OperationCanceledException) when (lease.CancellationToken.IsCancellationRequested)
+        {
+            // The session ended before this category could be added.
+        }
     }
 
     private sealed class CategoryRow

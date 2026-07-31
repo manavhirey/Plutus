@@ -124,7 +124,8 @@ else
 
     private async Task SaveAsync(ReviewItem item)
     {
-        if (!await SessionGuard.EnsureValidAsync())
+        using var lease = await SessionGuard.AcquireLeaseAsync();
+        if (lease is null)
         {
             return;
         }
@@ -134,19 +135,26 @@ else
         var note = NormalizeNote(item.Note);
         int? categoryId = item.SelectedCategoryId == 0 ? null : item.SelectedCategoryId;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var transaction = await db.Transactions.FirstOrDefaultAsync(t => t.Id == item.Id);
-        if (transaction is not null)
+        try
         {
-            transaction.Note = note;
-            transaction.CategoryId = categoryId;
-            transaction.IsCategorized = categoryId is not null;
-            transaction.IsReviewed = true;
-            transaction.CategorizedAt = categoryId is not null ? Time.GetUtcNow().UtcDateTime : transaction.CategorizedAt;
-            await db.SaveChangesAsync();
-        }
+            await using var db = await DbFactory.CreateDbContextAsync(lease.CancellationToken);
+            var transaction = await db.Transactions.FirstOrDefaultAsync(t => t.Id == item.Id, lease.CancellationToken);
+            if (transaction is not null)
+            {
+                transaction.Note = note;
+                transaction.CategoryId = categoryId;
+                transaction.IsCategorized = categoryId is not null;
+                transaction.IsReviewed = true;
+                transaction.CategorizedAt = categoryId is not null ? Time.GetUtcNow().UtcDateTime : transaction.CategorizedAt;
+                await db.SaveChangesAsync(lease.CancellationToken);
+            }
 
-        _items.Remove(item);
+            _items.Remove(item);
+        }
+        catch (OperationCanceledException) when (lease.CancellationToken.IsCancellationRequested)
+        {
+            // The session ended before this review update could complete.
+        }
     }
 
     private async Task RefineFromNoteAsync(ReviewItem item)

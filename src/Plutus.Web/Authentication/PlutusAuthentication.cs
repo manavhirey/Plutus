@@ -9,7 +9,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.Hosting;
 using System.Threading.RateLimiting;
 
 namespace Plutus.Web.Authentication;
@@ -30,9 +29,7 @@ public static class PlutusAuthentication
     internal static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(8);
 
     private const string CookieName = "__Host-plutus";
-    private const string DevelopmentCookieName = "plutus-dev-session";
     private const string AntiforgeryCookieName = "__Host-plutus-antiforgery";
-    private const string DevelopmentAntiforgeryCookieName = "plutus-dev-antiforgery";
 
     public static string GetRequiredPasswordHash(Func<string?>? getEnvironmentVariable = null)
     {
@@ -50,14 +47,13 @@ public static class PlutusAuthentication
 
     public static void AddSingleAdministratorAuthentication(
         this IServiceCollection services,
-        string passwordHash,
-        IHostEnvironment environment)
+        string passwordHash)
     {
         var authenticationState = new AdministratorAuthenticationState(
             passwordHash,
-            GetPasswordHashFingerprint(passwordHash),
-            environment.IsDevelopment());
+            GetPasswordHashFingerprint(passwordHash));
         services.AddSingleton(authenticationState);
+        services.AddSingleton<AdministratorSessionOperationCoordinator>();
         services.AddScoped<AdministratorSessionStore>();
         services.AddScoped<AdministratorSessionGuard>();
         services.AddScoped<AdministratorRevalidatingAuthenticationStateProvider>();
@@ -67,27 +63,19 @@ public static class PlutusAuthentication
 
         services.AddAntiforgery(options =>
         {
-            options.Cookie.Name = authenticationState.AllowInsecureDevelopmentCookies
-                ? DevelopmentAntiforgeryCookieName
-                : AntiforgeryCookieName;
+            options.Cookie.Name = AntiforgeryCookieName;
             options.Cookie.Path = "/";
             options.Cookie.HttpOnly = true;
             options.Cookie.SameSite = SameSiteMode.Strict;
-            options.Cookie.SecurePolicy = authenticationState.AllowInsecureDevelopmentCookies
-                ? CookieSecurePolicy.SameAsRequest
-                : CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         });
 
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
             {
-                options.Cookie.Name = authenticationState.AllowInsecureDevelopmentCookies
-                    ? DevelopmentCookieName
-                    : CookieName;
+                options.Cookie.Name = CookieName;
                 options.Cookie.HttpOnly = true;
-                options.Cookie.SecurePolicy = authenticationState.AllowInsecureDevelopmentCookies
-                    ? CookieSecurePolicy.SameAsRequest
-                    : CookieSecurePolicy.Always;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Strict;
                 options.Cookie.Path = "/";
                 options.ExpireTimeSpan = SessionLifetime;
@@ -186,7 +174,11 @@ public static class PlutusAuthentication
         .AllowAnonymous()
         .RequireRateLimiting(LoginRateLimitPolicy);
 
-        endpoints.MapPost(LogoutPath, async (HttpContext context, IAntiforgery antiforgery, AdministratorSessionStore sessions) =>
+        endpoints.MapPost(LogoutPath, async (
+            HttpContext context,
+            IAntiforgery antiforgery,
+            AdministratorSessionStore sessions,
+            AdministratorSessionOperationCoordinator operationCoordinator) =>
         {
             if (!await IsAntiforgeryRequestValidAsync(context, antiforgery))
             {
@@ -195,7 +187,9 @@ public static class PlutusAuthentication
 
             if (TryGetSessionId(context.User, out var sessionId))
             {
-                await sessions.RevokeAsync(sessionId, context.RequestAborted);
+                await operationCoordinator.RevokeAndDrainAsync(
+                    sessionId,
+                    cancellationToken => sessions.RevokeAsync(sessionId, cancellationToken));
             }
 
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -398,5 +392,4 @@ public static class PlutusAuthentication
 
 public sealed record AdministratorAuthenticationState(
     string PasswordHash,
-    string PasswordHashFingerprint,
-    bool AllowInsecureDevelopmentCookies);
+    string PasswordHashFingerprint);

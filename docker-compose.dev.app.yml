@@ -1,8 +1,15 @@
 services:
   dotnet:
     environment:
+      # The hot-reload app is HTTPS-only. The development certificate is local,
+      # gitignored, and mounted read-only; its password stays in the protected .env.
+      ASPNETCORE_URLS: https://+:8080
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/plutus-dev.pfx
+      ASPNETCORE_Kestrel__Certificates__Default__Password: ${PLUTUS_DEV_CERT_PASSWORD:?Set PLUTUS_DEV_CERT_PASSWORD in the protected project-root .env file after creating the local development certificate.}
       # Required even in development: ordinary app startup always requires an admin password hash.
       PLUTUS_AUTH_PASSWORD_HASH: ${PLUTUS_AUTH_PASSWORD_HASH:?Set PLUTUS_AUTH_PASSWORD_HASH in the protected project-root .env file before starting Plutus.}
       # Compose reads the protected project-root .env file and injects only this value
       # into the hot-reload app process. The secret file itself is not mounted.
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in the protected project-root .env file before starting the app.}
+    volumes:
+      - ./.dev-certs:/https:ro
