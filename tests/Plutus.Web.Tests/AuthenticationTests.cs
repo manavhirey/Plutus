@@ -14,10 +14,14 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Routing;
 using Plutus.Core.Data;
+using Plutus.Core.Reporting;
+using Plutus.Core.Sync;
 using Plutus.Web.Authentication;
 using Plutus.Web.Components;
+using Radzen;
 
 namespace Plutus.Web.Tests;
 
@@ -491,6 +495,18 @@ public sealed class AuthenticationTests
             stopwatch.Elapsed);
     }
 
+    internal static async Task<string> GetAuthenticatedDashboardHtmlAsync()
+    {
+        await using var app = await TestApplication.StartAsync();
+        var login = await app.GetLoginAsync();
+        var signIn = await app.PostLoginAsync(login, app.Password, "/");
+        var sessionCookie = TestApplication.GetCookie(signIn, app.SessionCookieName);
+        using var dashboard = await app.GetAsync("/", sessionCookie);
+
+        Assert.Equal(HttpStatusCode.OK, dashboard.StatusCode);
+        return await dashboard.Content.ReadAsStringAsync();
+    }
+
     private sealed class TestApplication : IAsyncDisposable
     {
         private readonly WebApplication _application;
@@ -558,6 +574,11 @@ public sealed class AuthenticationTests
             builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath));
             builder.Services.AddSingleAdministratorAuthentication(passwordHash);
             builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+            builder.Services.AddRadzenComponents();
+            builder.Services.AddSingleton<ISyncService, DashboardRenderSyncService>();
+            builder.Services.AddSingleton<ISpendingReport, DashboardRenderSpendingReport>();
+            builder.Services.AddSingleton<INetWorthReport, DashboardRenderNetWorthReport>();
+            builder.Services.AddSingleton<IOptions<SyncOptions>>(Options.Create(new SyncOptions()));
 
             var application = builder.Build();
             try
@@ -750,6 +771,23 @@ public sealed class AuthenticationTests
     }
 
     private sealed record LoginToken(string Token, string Cookie);
+
+    private sealed class DashboardRenderSyncService : ISyncService
+    {
+        public Task<Plutus.Core.Models.SyncRun?> RunAsync(CancellationToken ct = default) =>
+            Task.FromResult<Plutus.Core.Models.SyncRun?>(null);
+    }
+
+    private sealed class DashboardRenderSpendingReport : ISpendingReport
+    {
+        public Task<IReadOnlyList<CategorySpend>> GetMonthlySpendingAsync(int year, int month, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CategorySpend>>([]);
+    }
+
+    private sealed class DashboardRenderNetWorthReport : INetWorthReport
+    {
+        public Task<NetWorth> GetAsync(CancellationToken ct = default) => Task.FromResult(new NetWorth(0m, 0m, 0m));
+    }
 
     private sealed record RecoveryProcessResult(
         int ExitCode,

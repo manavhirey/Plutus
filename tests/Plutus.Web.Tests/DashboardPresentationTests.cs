@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AngleSharp.Html.Parser;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -175,8 +176,17 @@ public sealed class DashboardPresentationTests
         Assert.Matches("Dashboard[\\s\\S]*Review[\\s\\S]*Transactions[\\s\\S]*Settings", navigationText);
         Assert.Contains("nav-icon", layout.Markup, StringComparison.Ordinal);
         Assert.Equal("/", layout.Find("a.sidebar-brand").GetAttribute("href"));
-        Assert.Equal("/logout", layout.Find("form.sidebar-signout").GetAttribute("action"));
-        Assert.Equal("Sign out", layout.Find("form.sidebar-signout button.nav-link-button").TextContent.Trim());
+        var dashboardDocument = new HtmlParser().ParseDocument(await AuthenticationTests.GetAuthenticatedDashboardHtmlAsync());
+        var signOutForm = dashboardDocument.QuerySelector("form.sidebar-signout");
+        Assert.NotNull(signOutForm);
+        Assert.Equal("post", signOutForm.GetAttribute("method"));
+        Assert.Equal("/logout", signOutForm.GetAttribute("action"));
+        var signOutButton = signOutForm.QuerySelector("button.nav-link-button");
+        Assert.NotNull(signOutButton);
+        Assert.Equal("submit", signOutButton.GetAttribute("type"));
+        Assert.Equal("Sign out", signOutButton.TextContent.Trim());
+        var antiforgeryToken = signOutForm.QuerySelector("input[type='hidden'][name='__RequestVerificationToken']");
+        Assert.NotNull(antiforgeryToken);
     }
 
     [Fact]
