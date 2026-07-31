@@ -41,7 +41,7 @@ docker compose -f docker-compose.dev.yml run --rm -it dotnet \
   dotnet run --project src/Plutus.Web -- --create-password-hash
 ```
 
-Type and confirm a strong password at the hidden prompts. Copy the one generated
+Type and confirm a strong password of at least 16 characters at the hidden prompts. Copy the one generated
 `PLUTUS_AUTH_PASSWORD_HASH=...` line into the protected environment file. It is a
 password hash, not the password; still treat it as a sensitive deployment value.
 
@@ -85,9 +85,11 @@ dotnet run --project src/Plutus.Web
 ```
 
 When the app exits, run `unset OPENAI_API_KEY PLUTUS_AUTH_PASSWORD_HASH` or close
-that shell. Use the `https` launch profile (`https://localhost:7165`) for the
-local interactive app: authentication cookies are HTTPS-only and will not work
-over the `http` profile.
+that shell. In the `Development` environment only, the loopback-only hot-reload
+Compose port and the local HTTP launch profile use request-matched cookies so the
+interactive login works over local HTTP. This exception is selected solely by the
+environment name; never set `ASPNETCORE_ENVIRONMENT=Development` on the server.
+Production and non-Development environments always issue HTTPS-only cookies.
 
 The SQLite database and Data Protection keys are created under the app content root
 on first run; the schema migrates automatically at startup.
@@ -112,7 +114,11 @@ database migration or external-service setup if it is missing or malformed. Crea
 it only with the interactive `--create-password-hash` command above. The app has
 one administrator password; there is no registration, password reset, or recovery
 endpoint. Login is rate-limited and protected by antiforgery; sessions use secure,
-HTTP-only, same-site cookies and expire after eight hours of inactivity.
+HTTP-only, same-site cookies and have a hard eight-hour maximum lifetime. Each
+login also has a durable SQLite session record. Logout, session expiry, or a
+password-hash rotation invalidates every tab that presents that session; live
+InteractiveServer circuits revalidate every ten seconds and all state-changing
+handlers check the same record before writing finance data.
 
 For Docker Compose, put `OPENAI_API_KEY=...` and the generated
 `PLUTUS_AUTH_PASSWORD_HASH=...` in the gitignored, owner-only project-root `.env`
@@ -121,7 +127,12 @@ the app's process environment. The app reads both only from that process
 environment — never from app config or the database — and the `.env` file must
 never be committed. On the production host, add the hash to its protected
 deployment environment before running the new image; the container will refuse to
-start otherwise. Keep the existing HTTPS reverse proxy in front of the app.
+start otherwise. Keep the existing HTTPS reverse proxy in front of the app. The
+session-table migration applies automatically on startup. Existing browser cookies
+from before this release cannot have a server session record and will be asked to
+sign in again. To rotate the administrator password, generate a new hash, update
+the protected environment, and restart the container; the hash fingerprint in
+existing tickets ensures older sessions are rejected.
 
 ## Containerize
 

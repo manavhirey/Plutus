@@ -1,6 +1,7 @@
 @inject IDbContextFactory<PlutusDbContext> DbFactory
 @inject TimeProvider Time
 @inject ILogger<TransactionEditPanel> Logger
+@inject Plutus.Web.Authentication.AdministratorSessionGuard SessionGuard
 @using Plutus.Core.Transactions
 
 @if (_loaded && TransactionId is not null)
@@ -121,6 +122,11 @@
     private async Task SaveAsync()
     {
         if (TransactionId is null || _saving)
+        {
+            return;
+        }
+
+        if (!await SessionGuard.EnsureValidAsync())
         {
             return;
         }

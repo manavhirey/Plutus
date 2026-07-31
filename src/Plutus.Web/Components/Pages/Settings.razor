@@ -2,6 +2,7 @@
 @inject IDbContextFactory<PlutusDbContext> DbFactory
 @inject ISimpleFinConnectionService ConnectionService
 @inject Microsoft.Extensions.Options.IOptions<SyncOptions> SyncOptions
+@inject Plutus.Web.Authentication.AdministratorSessionGuard SessionGuard
 
 <PageTitle>Plutus — Settings</PageTitle>
 
@@ -167,6 +168,11 @@
 
     private async Task ConnectAsync()
     {
+        if (!await SessionGuard.EnsureValidAsync())
+        {
+            return;
+        }
+
         _connecting = true;
         _bannerMessage = null;
         try
@@ -190,6 +196,11 @@
 
     private async Task SaveCategoryAsync(CategoryRow row)
     {
+        if (!await SessionGuard.EnsureValidAsync())
+        {
+            return;
+        }
+
         await using var db = await DbFactory.CreateDbContextAsync();
         var category = await db.Categories.FirstOrDefaultAsync(c => c.Id == row.Id);
         if (category is not null)
@@ -205,6 +216,11 @@
 
     private async Task DeleteCategoryAsync(int id)
     {
+        if (!await SessionGuard.EnsureValidAsync())
+        {
+            return;
+        }
+
         await using var db = await DbFactory.CreateDbContextAsync();
         await db.Categories.Where(c => c.Id == id).ExecuteDeleteAsync();
         await LoadAsync();
@@ -212,6 +228,11 @@
 
     private async Task AddCategoryAsync()
     {
+        if (!await SessionGuard.EnsureValidAsync())
+        {
+            return;
+        }
+
         await using var db = await DbFactory.CreateDbContextAsync();
         var nextSort = _categories.Count == 0 ? 0 : _categories.Max(c => c.SortOrder) + 1;
         db.Categories.Add(new Category

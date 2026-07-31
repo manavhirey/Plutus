@@ -8,6 +8,7 @@
 @inject ISyncService SyncService
 @inject TimeProvider Time
 @inject Microsoft.Extensions.Options.IOptions<Plutus.Core.Sync.SyncOptions> SyncOpts
+@inject Plutus.Web.Authentication.AdministratorSessionGuard SessionGuard
 
 <PageTitle>Plutus — Dashboard</PageTitle>
 
@@ -228,6 +229,11 @@ else
     private async Task SyncNowAsync()
     {
         if (_syncing)
+        {
+            return;
+        }
+
+        if (!await SessionGuard.EnsureValidAsync())
         {
             return;
         }

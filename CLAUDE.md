@@ -47,9 +47,12 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
   or put either value in app config/DB.
 - `Program.cs` requires a valid `PLUTUS_AUTH_PASSWORD_HASH` before migrations or external-service
   registration. It protects all application endpoints by default; only login and static assets
-  are anonymous. Cookies are `Secure`, `HttpOnly`, same-site strict, and expire after eight hours
-  of inactivity. Keep Caddy's HTTPS forwarding intact; local interactive development must use the
-  HTTPS launch profile because secure cookies are intentionally unusable over HTTP.
+  are anonymous. Production cookies (including antiforgery) use host-safe names, `Secure`,
+  `HttpOnly`, same-site strict, and an eight-hour hard maximum lifetime. SQLite stores a session
+  record per login; logout/expiry/hash rotation invalidates it and InteractiveServer revalidates
+  every ten seconds. All Blazor state-changing handlers use the same guard before writes. The
+  `Development`-only loopback hot-reload workflow uses request-matched cookies so local HTTP works;
+  never use that environment on the server. Keep Caddy's HTTPS forwarding intact.
 - The SimpleFIN access URL is stored **encrypted in the DB** via ASP.NET Data Protection;
   the key ring lives on the `plutus-data` volume — lose it and the connection can't decrypt.
 - `Program.cs` trusts `X-Forwarded-*` only from RFC1918 peers with `ForwardLimit = 1`;
@@ -64,6 +67,10 @@ dotnet ef migrations add <Name> --project src/Plutus.Core
   (else `Cannot find docker/podman executable`):
   `sg docker -c 'export PATH="$HOME/.dotnet:$PATH" && dotnet publish src/Plutus.Web -c Release /t:PublishContainer'`,
   then `sg docker -c "docker compose up -d"`. EF migrations auto-apply on container startup.
+- Authentication cutover: generate the hash with the app's interactive generator (minimum 16
+  characters), put only the generated variable in the protected server environment, then deploy.
+  The new administrator-session migration auto-applies and signs out legacy browser cookies.
+  Rotating the hash requires a container restart and invalidates existing sessions.
 
 ## One-off data jobs (backfills & diagnostics)
 Config-gated `BackgroundService`s in `src/Plutus.Web/BackgroundServices` run once on startup when their

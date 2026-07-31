@@ -2,6 +2,7 @@
 @inject IDbContextFactory<PlutusDbContext> DbFactory
 @inject ICategorizer Categorizer
 @inject TimeProvider Time
+@inject Plutus.Web.Authentication.AdministratorSessionGuard SessionGuard
 
 <PageTitle>Plutus — Review</PageTitle>
 
@@ -123,6 +124,11 @@ else
 
     private async Task SaveAsync(ReviewItem item)
     {
+        if (!await SessionGuard.EnsureValidAsync())
+        {
+            return;
+        }
+
         item.Saving = true;
 
         var note = NormalizeNote(item.Note);

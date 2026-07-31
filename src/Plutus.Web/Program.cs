@@ -27,15 +27,14 @@ if (PasswordHashGenerator.IsRequested(args))
 
 // Deliberately validate this before registering external services or touching the
 // database. A deployment with a missing or malformed admin hash never starts.
-var passwordHash = PlutusAuthentication.GetRequiredPasswordHash();
-
 var builder = WebApplication.CreateBuilder(args);
+var passwordHash = PlutusAuthentication.GetRequiredPasswordHash();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddRadzenComponents();
-builder.Services.AddSingleAdministratorAuthentication();
+builder.Services.AddSingleAdministratorAuthentication(passwordHash, builder.Environment);
 
 // Persist the Data Protection key ring to disk so the encrypted SimpleFIN access
 // URL stays decryptable across restarts (this folder is a volume when containerized).
@@ -133,7 +132,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets().AllowAnonymous();
-app.MapSingleAdministratorAuthentication(passwordHash);
+app.MapSingleAdministratorAuthentication();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .RequireAuthorization();

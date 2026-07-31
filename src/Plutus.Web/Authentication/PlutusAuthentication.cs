@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -7,6 +8,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Hosting;
 using System.Threading.RateLimiting;
 
 namespace Plutus.Web.Authentication;
@@ -22,8 +25,14 @@ public static class PlutusAuthentication
     public const string LoginPath = "/login";
     public const string LogoutPath = "/logout";
     internal const string LoginRateLimitPolicy = "plutus-login";
+    internal const string SessionIdClaimType = "plutus_session_id";
+    internal const string PasswordHashFingerprintClaimType = "plutus_auth_fingerprint";
+    internal static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(8);
 
     private const string CookieName = "__Host-plutus";
+    private const string DevelopmentCookieName = "plutus-dev-session";
+    private const string AntiforgeryCookieName = "__Host-plutus-antiforgery";
+    private const string DevelopmentAntiforgeryCookieName = "plutus-dev-antiforgery";
 
     public static string GetRequiredPasswordHash(Func<string?>? getEnvironmentVariable = null)
     {
@@ -39,20 +48,54 @@ public static class PlutusAuthentication
         return configuredHash;
     }
 
-    public static void AddSingleAdministratorAuthentication(this IServiceCollection services)
+    public static void AddSingleAdministratorAuthentication(
+        this IServiceCollection services,
+        string passwordHash,
+        IHostEnvironment environment)
     {
+        var authenticationState = new AdministratorAuthenticationState(
+            passwordHash,
+            GetPasswordHashFingerprint(passwordHash),
+            environment.IsDevelopment());
+        services.AddSingleton(authenticationState);
+        services.AddScoped<AdministratorSessionStore>();
+        services.AddScoped<AdministratorSessionGuard>();
+        services.AddScoped<AdministratorRevalidatingAuthenticationStateProvider>();
+        services.AddScoped<AuthenticationStateProvider>(services =>
+            services.GetRequiredService<AdministratorRevalidatingAuthenticationStateProvider>());
+        services.AddCascadingAuthenticationState();
+
+        services.AddAntiforgery(options =>
+        {
+            options.Cookie.Name = authenticationState.AllowInsecureDevelopmentCookies
+                ? DevelopmentAntiforgeryCookieName
+                : AntiforgeryCookieName;
+            options.Cookie.Path = "/";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Strict;
+            options.Cookie.SecurePolicy = authenticationState.AllowInsecureDevelopmentCookies
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
+        });
+
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
             {
-                options.Cookie.Name = CookieName;
+                options.Cookie.Name = authenticationState.AllowInsecureDevelopmentCookies
+                    ? DevelopmentCookieName
+                    : CookieName;
                 options.Cookie.HttpOnly = true;
-                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                options.Cookie.SecurePolicy = authenticationState.AllowInsecureDevelopmentCookies
+                    ? CookieSecurePolicy.SameAsRequest
+                    : CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Strict;
                 options.Cookie.Path = "/";
-                options.ExpireTimeSpan = TimeSpan.FromHours(8);
-                options.SlidingExpiration = true;
+                options.ExpireTimeSpan = SessionLifetime;
+                options.SlidingExpiration = false;
                 options.LoginPath = LoginPath;
                 options.AccessDeniedPath = LoginPath;
+                options.Events.OnValidatePrincipal = context =>
+                    ValidatePrincipalAsync(context, authenticationState);
             });
 
         services.AddAuthorizationBuilder()
@@ -76,13 +119,19 @@ public static class PlutusAuthentication
         });
     }
 
-    public static IEndpointRouteBuilder MapSingleAdministratorAuthentication(this IEndpointRouteBuilder endpoints, string passwordHash)
+    public static IEndpointRouteBuilder MapSingleAdministratorAuthentication(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(LoginPath, (HttpContext context, IAntiforgery antiforgery, string? returnUrl) =>
             LoginPage(context, antiforgery, returnUrl, failed: false))
             .AllowAnonymous();
 
-        endpoints.MapPost(LoginPath, async (HttpContext context, IAntiforgery antiforgery, ILoggerFactory loggerFactory) =>
+        endpoints.MapPost(LoginPath, async (
+            HttpContext context,
+            IAntiforgery antiforgery,
+            ILoggerFactory loggerFactory,
+            AdministratorSessionStore sessions,
+            AdministratorAuthenticationState authenticationState,
+            TimeProvider timeProvider) =>
         {
             if (!await IsAntiforgeryRequestValidAsync(context, antiforgery))
             {
@@ -93,15 +142,34 @@ public static class PlutusAuthentication
             var password = form["password"].ToString();
             var returnUrl = form["returnUrl"].ToString();
 
-            if (!VerifyPassword(passwordHash, password))
+            if (!VerifyPassword(authenticationState.PasswordHash, password))
             {
                 loggerFactory.CreateLogger("Plutus.Authentication")
                     .LogWarning("Rejected an invalid Plutus administrator login attempt.");
                 return LoginPage(context, antiforgery, returnUrl, failed: true, StatusCodes.Status401Unauthorized);
             }
 
+            var expiresAt = timeProvider.GetUtcNow().Add(SessionLifetime);
+            Plutus.Core.Models.AdministratorSession session;
+            try
+            {
+                session = await sessions.CreateAsync(
+                    authenticationState.PasswordHashFingerprint,
+                    expiresAt.UtcDateTime,
+                    context.RequestAborted);
+            }
+            catch (Exception) when (!context.RequestAborted.IsCancellationRequested)
+            {
+                loggerFactory.CreateLogger("Plutus.Authentication")
+                    .LogWarning("Could not create a Plutus administrator session.");
+                return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
             var identity = new ClaimsIdentity(
-                [new Claim(ClaimTypes.Name, "administrator")],
+                [
+                    new Claim(ClaimTypes.Name, "administrator"),
+                    new Claim(SessionIdClaimType, session.Id.ToString("N")),
+                    new Claim(PasswordHashFingerprintClaimType, authenticationState.PasswordHashFingerprint),
+                ],
                 CookieAuthenticationDefaults.AuthenticationScheme);
             await context.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
@@ -109,8 +177,8 @@ public static class PlutusAuthentication
                 new AuthenticationProperties
                 {
                     IsPersistent = false,
-                    AllowRefresh = true,
-                    ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8),
+                    AllowRefresh = false,
+                    ExpiresUtc = expiresAt,
                 });
 
             return Results.Redirect(SafeReturnUrl(returnUrl));
@@ -118,11 +186,16 @@ public static class PlutusAuthentication
         .AllowAnonymous()
         .RequireRateLimiting(LoginRateLimitPolicy);
 
-        endpoints.MapPost(LogoutPath, async (HttpContext context, IAntiforgery antiforgery) =>
+        endpoints.MapPost(LogoutPath, async (HttpContext context, IAntiforgery antiforgery, AdministratorSessionStore sessions) =>
         {
             if (!await IsAntiforgeryRequestValidAsync(context, antiforgery))
             {
                 return Results.BadRequest();
+            }
+
+            if (TryGetSessionId(context.User, out var sessionId))
+            {
+                await sessions.RevokeAsync(sessionId, context.RequestAborted);
             }
 
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -166,6 +239,17 @@ public static class PlutusAuthentication
         !returnUrl.StartsWith("/\\", StringComparison.Ordinal) &&
         !returnUrl.Contains('\\') &&
         Uri.TryCreate(returnUrl, UriKind.Relative, out _);
+
+    internal static bool TryGetSessionId(ClaimsPrincipal principal, out Guid sessionId) =>
+        Guid.TryParseExact(principal.FindFirstValue(SessionIdClaimType), "N", out sessionId);
+
+    internal static bool HasExpectedFingerprint(ClaimsPrincipal principal, string expectedFingerprint) =>
+        CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(principal.FindFirstValue(PasswordHashFingerprintClaimType) ?? string.Empty),
+            System.Text.Encoding.UTF8.GetBytes(expectedFingerprint));
+
+    internal static string GetPasswordHashFingerprint(string passwordHash) =>
+        Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(passwordHash)));
 
     private static bool IsRecognizedAspNetPasswordHash(string passwordHash)
     {
@@ -219,6 +303,37 @@ public static class PlutusAuthentication
         {
             return false;
         }
+    }
+
+    private static async Task ValidatePrincipalAsync(
+        CookieValidatePrincipalContext context,
+        AdministratorAuthenticationState authenticationState)
+    {
+        var principal = context.Principal;
+        try
+        {
+            if (principal is not null &&
+                TryGetSessionId(principal, out var sessionId) &&
+                HasExpectedFingerprint(principal, authenticationState.PasswordHashFingerprint))
+            {
+                var sessions = context.HttpContext.RequestServices.GetRequiredService<AdministratorSessionStore>();
+                if (await sessions.IsValidAsync(sessionId, authenticationState.PasswordHashFingerprint, context.HttpContext.RequestAborted))
+                {
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (context.HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Authentication infrastructure failure is intentionally fail-closed.
+        }
+
+        context.RejectPrincipal();
+        await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     }
 
     private static IResult LoginPage(
@@ -280,3 +395,8 @@ public static class PlutusAuthentication
         }
     }
 }
+
+public sealed record AdministratorAuthenticationState(
+    string PasswordHash,
+    string PasswordHashFingerprint,
+    bool AllowInsecureDevelopmentCookies);

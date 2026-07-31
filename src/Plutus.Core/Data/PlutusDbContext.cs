@@ -6,6 +6,7 @@ namespace Plutus.Core.Data;
 
 public class PlutusDbContext(DbContextOptions<PlutusDbContext> options) : DbContext(options)
 {
+    public DbSet<AdministratorSession> AdministratorSessions => Set<AdministratorSession>();
     public DbSet<SimpleFinConnection> SimpleFinConnections => Set<SimpleFinConnection>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<Category> Categories => Set<Category>();

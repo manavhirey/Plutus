@@ -1,12 +1,17 @@
 using System.Net;
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Plutus.Core.Data;
 using Plutus.Web.Authentication;
 
 namespace Plutus.Web.Tests;
@@ -44,6 +49,8 @@ public sealed class AuthenticationTests
         Assert.True(PlutusAuthentication.VerifyPassword(hash, password));
         Assert.DoesNotContain(password, generated);
         Assert.True(PasswordHashGenerator.IsRequested([PasswordHashGenerator.Command]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PasswordHashGenerator.Run(new StringReader($"{new string('x', PasswordHashGenerator.MinimumPasswordLength - 1)}\n"), new StringWriter()));
     }
 
     [Fact]
@@ -92,7 +99,7 @@ public sealed class AuthenticationTests
 
         Assert.Equal(HttpStatusCode.Redirect, rejectedRedirect.StatusCode);
         Assert.Equal("/", rejectedRedirect.Headers.Location?.OriginalString);
-        var sessionCookie = TestApplication.GetCookie(rejectedRedirect, "__Host-plutus");
+        var sessionCookie = TestApplication.GetCookie(rejectedRedirect, app.SessionCookieName);
         Assert.Contains("secure", sessionCookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("httponly", sessionCookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", sessionCookie, StringComparison.OrdinalIgnoreCase);
@@ -115,7 +122,7 @@ public sealed class AuthenticationTests
 
         var login = await app.GetLoginAsync();
         var signIn = await app.PostLoginAsync(login, app.Password, "/finance");
-        var sessionCookie = TestApplication.GetCookie(signIn, "__Host-plutus");
+        var sessionCookie = TestApplication.GetCookie(signIn, app.SessionCookieName);
         var logoutToken = await app.GetLoginAsync(sessionCookie);
 
         var logout = await app.PostAsync(
@@ -126,13 +133,60 @@ public sealed class AuthenticationTests
 
         Assert.Equal(HttpStatusCode.Redirect, logout.StatusCode);
         Assert.Equal("/login", logout.Headers.Location?.OriginalString);
-        var clearedSession = TestApplication.GetCookie(logout, "__Host-plutus");
+        var clearedSession = TestApplication.GetCookie(logout, app.SessionCookieName);
         Assert.Contains("expires=", clearedSession, StringComparison.OrdinalIgnoreCase);
 
-        // Sign-out clears the browser's encrypted, stateless session cookie. A
-        // client that honors that response no longer reaches protected routes.
-        var afterLogout = await app.Client.GetAsync("/finance");
+        // The durable session record also rejects a retained cookie from another
+        // tab, rather than merely relying on this browser honoring Set-Cookie.
+        var afterLogout = await app.GetAsync("/finance", sessionCookie);
         Assert.Equal(HttpStatusCode.Redirect, afterLogout.StatusCode);
+    }
+
+    [Fact]
+    public async Task Durable_sessions_reject_expiry_and_password_hash_rotation()
+    {
+        await using var app = await TestApplication.StartAsync();
+        var expired = await app.CreateSessionAsync(
+            PlutusAuthentication.GetPasswordHashFingerprint(app.PasswordHash),
+            DateTime.UtcNow.AddSeconds(-1));
+
+        Assert.False(await app.IsSessionValidAsync(expired.Id, expired.PasswordHashFingerprint));
+        Assert.False(await app.IsSessionValidAsync(
+            expired.Id,
+            PlutusAuthentication.GetPasswordHashFingerprint($"rotated-{Guid.NewGuid():N}")));
+        var ticket = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(PlutusAuthentication.PasswordHashFingerprintClaimType, expired.PasswordHashFingerprint)],
+            "test"));
+        Assert.False(PlutusAuthentication.HasExpectedFingerprint(
+            ticket,
+            PlutusAuthentication.GetPasswordHashFingerprint($"rotated-{Guid.NewGuid():N}")));
+        Assert.IsType<AdministratorRevalidatingAuthenticationStateProvider>(await app.GetAuthenticationStateProviderAsync());
+    }
+
+    [Fact]
+    public async Task A_retained_cookie_is_rejected_at_the_http_boundary_when_its_server_session_expires()
+    {
+        await using var app = await TestApplication.StartAsync();
+        var login = await app.GetLoginAsync();
+        var signIn = await app.PostLoginAsync(login, app.Password, "/finance");
+        var sessionCookie = TestApplication.GetCookie(signIn, app.SessionCookieName);
+
+        await app.ExpireSessionsAsync();
+
+        Assert.Equal(HttpStatusCode.Redirect, (await app.GetAsync("/finance", sessionCookie)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Development_cookie_policy_permits_the_loopback_http_hot_reload_workflow_only()
+    {
+        await using var app = await TestApplication.StartAsync(environmentName: "Development", scheme: "http");
+        var login = await app.GetLoginAsync();
+        var signIn = await app.PostLoginAsync(login, app.Password, "/finance");
+        var sessionCookie = TestApplication.GetCookie(signIn, app.SessionCookieName);
+
+        Assert.Equal("plutus-dev-session", app.SessionCookieName);
+        Assert.DoesNotContain("secure", sessionCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.OK, (await app.GetAsync("/finance", sessionCookie)).StatusCode);
     }
 
     private sealed class TestApplication : IAsyncDisposable
@@ -140,46 +194,64 @@ public sealed class AuthenticationTests
         private readonly WebApplication _application;
         private readonly CapturingLoggerProvider _loggerProvider;
 
-        private TestApplication(WebApplication application, CapturingLoggerProvider loggerProvider, string password, string passwordHash)
+        private readonly string _databasePath;
+
+        private TestApplication(
+            WebApplication application,
+            CapturingLoggerProvider loggerProvider,
+            string password,
+            string passwordHash,
+            string databasePath,
+            string scheme)
         {
             _application = application;
             _loggerProvider = loggerProvider;
             Password = password;
             PasswordHash = passwordHash;
+            _databasePath = databasePath;
             Client = application.GetTestClient();
-            Client.BaseAddress = new Uri("https://localhost");
+            Client.BaseAddress = new Uri($"{scheme}://localhost");
         }
 
         public HttpClient Client { get; }
         public string Password { get; }
         public string PasswordHash { get; }
+        public string SessionCookieName => _application.Environment.IsDevelopment() ? "plutus-dev-session" : "__Host-plutus";
         public string Logs => _loggerProvider.Messages;
 
-        public static async Task<TestApplication> StartAsync()
+        public static async Task<TestApplication> StartAsync(string environmentName = "Testing", string scheme = "https")
         {
             var password = $"test-{Guid.NewGuid():N}";
             var passwordHash = new PasswordHasher<object>().HashPassword(new object(), password);
             var loggerProvider = new CapturingLoggerProvider();
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
-                EnvironmentName = "Development",
+                EnvironmentName = environmentName,
             });
             builder.WebHost.UseTestServer();
+            var databasePath = Path.Combine(Path.GetTempPath(), $"plutus-auth-{Guid.NewGuid():N}.db");
             builder.Services.AddSingleton<ILoggerProvider>(loggerProvider);
+            builder.Services.AddSingleton(TimeProvider.System);
+            builder.Services.AddDbContextFactory<PlutusDbContext>(options => options.UseSqlite($"Data Source={databasePath}"));
             builder.Services.AddDataProtection();
-            builder.Services.AddAntiforgery();
-            builder.Services.AddSingleAdministratorAuthentication();
+            builder.Services.AddSingleAdministratorAuthentication(passwordHash, builder.Environment);
 
             var application = builder.Build();
             application.UseRateLimiter();
             application.UseAuthentication();
             application.UseAuthorization();
             application.UseAntiforgery();
-            application.MapSingleAdministratorAuthentication(passwordHash);
+            application.MapSingleAdministratorAuthentication();
             application.MapGet("/finance", () => Results.Ok("protected finance data"));
+            await using (var scope = application.Services.CreateAsyncScope())
+            {
+                var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PlutusDbContext>>();
+                await using var db = await factory.CreateDbContextAsync();
+                await db.Database.MigrateAsync();
+            }
             await application.StartAsync();
 
-            return new TestApplication(application, loggerProvider, password, passwordHash);
+            return new TestApplication(application, loggerProvider, password, passwordHash, databasePath, scheme);
         }
 
         public async Task<LoginToken> GetLoginAsync(string? sessionCookie = null)
@@ -194,7 +266,10 @@ public sealed class AuthenticationTests
             var body = await response.Content.ReadAsStringAsync();
             var token = Regex.Match(body, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value;
             Assert.False(string.IsNullOrEmpty(token));
-            return new LoginToken(token, GetCookie(response, ".AspNetCore.Antiforgery"));
+            var antiforgeryCookieName = _application.Environment.IsDevelopment()
+                ? "plutus-dev-antiforgery"
+                : "__Host-plutus-antiforgery";
+            return new LoginToken(token, GetCookie(response, antiforgeryCookieName));
         }
 
         public Task<HttpResponseMessage> PostLoginAsync(LoginToken login, string password, string returnUrl) =>
@@ -230,10 +305,38 @@ public sealed class AuthenticationTests
             return cookie!;
         }
 
+        public async Task<Plutus.Core.Models.AdministratorSession> CreateSessionAsync(string fingerprint, DateTime expiresAt)
+        {
+            await using var scope = _application.Services.CreateAsyncScope();
+            return await scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>().CreateAsync(fingerprint, expiresAt);
+        }
+
+        public async Task<bool> IsSessionValidAsync(Guid sessionId, string fingerprint)
+        {
+            await using var scope = _application.Services.CreateAsyncScope();
+            return await scope.ServiceProvider.GetRequiredService<AdministratorSessionStore>().IsValidAsync(sessionId, fingerprint);
+        }
+
+        public async Task<AuthenticationStateProvider> GetAuthenticationStateProviderAsync()
+        {
+            await using var scope = _application.Services.CreateAsyncScope();
+            return scope.ServiceProvider.GetRequiredService<AuthenticationStateProvider>();
+        }
+
+        public async Task ExpireSessionsAsync()
+        {
+            await using var scope = _application.Services.CreateAsyncScope();
+            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<PlutusDbContext>>();
+            await using var db = await factory.CreateDbContextAsync();
+            await db.AdministratorSessions.ExecuteUpdateAsync(setters =>
+                setters.SetProperty(session => session.ExpiresAt, DateTime.UtcNow.AddSeconds(-1)));
+        }
+
         public async ValueTask DisposeAsync()
         {
             Client.Dispose();
             await _application.DisposeAsync();
+            File.Delete(_databasePath);
         }
     }
 

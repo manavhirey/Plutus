@@ -5,6 +5,7 @@ namespace Plutus.Web.Authentication;
 internal static class PasswordHashGenerator
 {
     internal const string Command = "--create-password-hash";
+    internal const int MinimumPasswordLength = 16;
 
     public static bool IsRequested(string[] args) => args.Length == 1 && args[0] == Command;
 
@@ -15,9 +16,9 @@ internal static class PasswordHashGenerator
         output.Write("Confirm password: ");
         var confirmation = ReadPassword(input, output);
 
-        if (string.IsNullOrEmpty(password))
+        if (password.Length < MinimumPasswordLength)
         {
-            throw new InvalidOperationException("A non-empty password is required.");
+            throw new InvalidOperationException($"Use an administrator password of at least {MinimumPasswordLength} characters.");
         }
 
         if (!string.Equals(password, confirmation, StringComparison.Ordinal))
