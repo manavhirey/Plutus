@@ -2,6 +2,11 @@
 
 **Status:** Planned; do not begin a task until its predecessor has a GPT-5.6 Sol review.
 
+**Current release prerequisite:** Application-level administrator authentication is already
+implemented and tested. Every future deployment must preserve it and follow the current
+[production authentication cutover checklist](../../../README.md#production-authentication-cutover-checklist)
+for backup, restore, rollback, and access verification.
+
 **Primary outcome:** Plutus becomes an approve-the-agent expense workflow. It accepts SimpleFIN data independently, proposes a clean description and category, requires only a short user confirmation, and never misrepresents incomplete SimpleFIN data as healthy.
 
 **Reference design:** `docs/superpowers/specs/2026-07-30-low-effort-review-and-sync-health-design.md`
@@ -24,14 +29,14 @@ This migration is intentionally provider-only: it makes `OPENAI_API_KEY` the sol
 
 - [ ] **-1.2 Independent provider-migration review** — GPT-5.6 Sol verifies no Anthropic runtime/configuration path remains, no secret can enter the repo or logs, structured category output is still constrained, documentation and Docker use `OPENAI_API_KEY`, and tests do not call the live API.
 
-- [ ] **-1.3 Controlled deployment cutover** — Retain the previous deployed image and secure environment configuration as rollback. Provision `OPENAI_API_KEY` only in the gitignored host secret environment file; verify a non-empty in-container value with a no-output presence check. Recreate the container, run one real sanitised categorization smoke check with an invented merchant string, then remove the obsolete Anthropic key only after success.
-  - Never use `docker compose config` or a command that prints the resolved key. If startup/smoke fails, restore the previous image and secure environment configuration.
+- [ ] **-1.3 Controlled deployment cutover** — Retain a known-good **authenticated** image and its secure environment configuration as rollback. Provision `OPENAI_API_KEY` only in the gitignored host secret environment file; verify a non-empty in-container value with a no-output presence check. Recreate the container, run one real sanitised categorization smoke check with an invented merchant string, then remove the obsolete Anthropic key only after success.
+  - Never use `docker compose config` or a command that prints the resolved key. If startup/smoke fails, restore only a known-good authenticated image/configuration. The pre-authentication image must remain offline or behind temporary reverse-proxy access control until an authenticated replacement is running; follow the current README runbook.
 
 ## Milestone 0 — truthful and serialized SimpleFIN sync
 
 This milestone goes first because the agent workflow cannot be trusted if the underlying transactions are silently stale or partial.
 
-- [ ] **0.0 Access-control decision and verification plan** — Before public deployment, select either proxy authentication or application authentication. Document its deployment owner and an unauthenticated-denial verification. If application auth is selected, include automated authorization tests.
+- [x] **0.0 Access-control foundation and verification plan** — Application-level administrator authentication and automated unauthorized-access coverage are already implemented. Before every public deployment, preserve that boundary and record the README runbook's unauthenticated-denial verification.
   - Guardrail: TLS is not an authorization mechanism; do not place credentials in source, tests, or task output.
 
 - [ ] **0.1 Sync domain and migration** — Extend `SyncRun` (or a related run-detail model) with outcome, trigger, timing, safe reason codes, a last-healthy timestamp, a completed-fetch cursor, and bounded recovery-window metadata. Add the EF migration and deterministic tests for `Success`, `Degraded`, `Failed`, and `Skipped`.
@@ -89,4 +94,4 @@ This milestone goes first because the agent workflow cannot be trusted if the un
 2. A GPT-5.6 Sol reviewer finds no unresolved correctness, privacy, migration, or concurrency issue.
 3. Manual verification uses a disposable/local database and sanitized representative merchant strings; no production credentials or financial data enter source control or task output.
 4. Deployment starts with a non-destructive database backup and migration check. The released dashboard visibly reports the first post-deploy sync outcome.
-5. The chosen proxy- or application-level access control has a recorded unauthenticated-denial check before deployment.
+5. The implemented application-level access control has a recorded unauthenticated-denial check before deployment.

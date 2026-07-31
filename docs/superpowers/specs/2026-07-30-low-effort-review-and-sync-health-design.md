@@ -114,10 +114,10 @@ The later enrichment milestone changes the missing-key behavior: Plutus and Simp
 
 The provider migration is not deployed until its operational cutover is prepared:
 
-1. Keep the current deployed image and its secure environment configuration as the rollback point; do not print, commit, or copy either provider key into task output.
+1. Keep a known-good **authenticated** deployed image and its secure environment configuration as the rollback point; do not print, commit, or copy either provider key into task output. The pre-authentication image is never a public rollback target: keep it offline or behind temporary reverse-proxy access control until an authenticated replacement is running.
 2. Add `OPENAI_API_KEY` to the deployed host's gitignored secret environment file. Verify Compose receives a non-empty key by running an in-container presence check that returns only an exit status—not `docker compose config`, which could print resolved secrets.
 3. Build/recreate the container, then run a one-time sanitised categorization smoke check using only an invented merchant string. Verify it produces schema-valid category/note/confidence output and that the app reports no secret in logs.
-4. If startup or the smoke check fails, roll back to the previous image and secure environment configuration; otherwise remove the obsolete Anthropic key from the deployed secret store.
+4. If startup or the smoke check fails, roll back only to the known-good authenticated image and secure environment configuration; otherwise remove the obsolete Anthropic key from the deployed secret store. Follow the current [production authentication cutover checklist](../../../README.md#production-authentication-cutover-checklist).
 
 This operational test is distinct from unit tests and is the only migration verification permitted to make a real model request.
 
@@ -195,12 +195,11 @@ Posted transactions remain the accounting default. The user-facing health view s
 
 ## Access protection release gate
 
-Plutus contains personal financial data and is hosted on a public HTTPS endpoint. Before this release is deployed, choose and verify one protection boundary:
-
-1. authenticated reverse-proxy access with an explicit unauthenticated-denial test, or
-2. application-level authentication/authorization with automated unauthorized-access coverage.
-
-The release does not proceed on the assumption that TLS alone protects the app. The selected mechanism, owner, and verification evidence belong in deployment documentation; no credentials belong in the repository.
+Plutus contains personal financial data and is hosted on a public HTTPS endpoint.
+Application-level authentication/authorization with automated unauthorized-access coverage is
+already implemented and remains a release prerequisite. The release does not proceed on the
+assumption that TLS alone protects the app. Preserve the application boundary and record the
+README runbook's unauthenticated-denial verification; no credentials belong in the repository.
 
 ## Key states
 

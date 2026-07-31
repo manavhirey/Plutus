@@ -242,6 +242,8 @@ public sealed class AuthenticationTests
         Assert.Equal(2, exitCode);
         Assert.DoesNotContain("revoked", output.ToString(), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Session recovery failed; Plutus was not started.", error.ToString().Trim());
+        Assert.DoesNotContain(app.DatabasePath, error.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("SQLite", error.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

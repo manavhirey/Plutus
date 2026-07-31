@@ -1,7 +1,13 @@
 # SimpleFIN re-auth: prevent & heal duplicate accounts/transactions — design
 
+> **Historical / superseded — do not execute as a deployment runbook.** This dated
+> design records a prior SimpleFIN re-auth reconciliation effort. Its approval and
+> pending-plan status are no longer active instructions. For any current deployment,
+> backup, restore, rollback, or authentication operation, follow the
+> [production authentication cutover checklist](../../../README.md#production-authentication-cutover-checklist).
+
 **Date:** 2026-06-09
-**Status:** Approved (design); pending implementation plan
+**Status:** Historical / superseded; non-executable
 
 ## Problem
 
@@ -103,9 +109,10 @@ row:
 5. **Delete** the now-empty duplicate account rows.
 6. Log a summary (groups merged, accounts deleted, transactions repointed/dropped).
 
-Operational steps (manual, around the deploy): snapshot the prod DB first (copy
-`plutus.db` + `-wal` + `-shm`), deploy with the flag set, verify the result (6 accounts, Net
-Worth ~$53,847), then unset the flag and redeploy so it's inert again.
+Historical operational notes are non-executable. For any current work, use the README
+runbook: quiesce the app or use a SQLite-supported coherent backup/snapshot (never
+sequential live database/WAL/SHM copies), preserve Data Protection keys, and use the
+current authenticated release and recovery procedure.
 
 ## Components & file structure
 

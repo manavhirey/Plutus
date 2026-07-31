@@ -1,6 +1,11 @@
 # SimpleFIN Re-auth Dedup Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Historical / superseded — non-executable.** Do not use this unchecked plan as an
+> agent instruction or deployment runbook. It records a prior re-auth reconciliation
+> effort. For any current production operation, follow the
+> [production authentication cutover checklist](../../../README.md#production-authentication-cutover-checklist),
+> which supersedes every imperative deployment, backup, restore, rollback, and access
+> instruction below.
 
 **Goal:** Stop SimpleFIN re-authentication from creating duplicate accounts/transactions (it re-mints account & transaction IDs), and heal the 5 duplicate accounts already in the live DB.
 

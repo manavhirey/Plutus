@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Plutus.Core;
 using Plutus.Core.Data;
 using Plutus.Core.SimpleFin;
@@ -41,6 +42,9 @@ if (AdministratorSessionRecoveryCommand.IsMentioned(args))
         // This builds only the data services. It never creates a WebApplication,
         // maps endpoints, starts hosted services, or listens on a network port.
         var recoveryBuilder = Host.CreateApplicationBuilder();
+        // The command reports only its own sanitized result. Suppress default
+        // framework/EF providers, which can include database paths in failures.
+        recoveryBuilder.Logging.ClearProviders();
         var recoveryDbPath = recoveryBuilder.Configuration["Plutus:Database:Path"] ?? "plutus.db";
         if (!Path.IsPathRooted(recoveryDbPath))
         {
